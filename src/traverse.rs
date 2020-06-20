@@ -2,6 +2,36 @@ use crate::print;
 use log::{debug, error};
 use yaml_rust::Yaml;
 
+enum ArrayIndex {
+    Star,
+    Idx(usize),
+}
+
+// TODO(wdeuschle): unit test
+fn get_array_idx(bracketed_path_elem: &str) -> ArrayIndex {
+    if !bracketed_path_elem.starts_with('[') || !bracketed_path_elem.ends_with(']') {
+        error!(
+            "key `{:?}` is not a valid array index, exiting",
+            bracketed_path_elem
+        );
+        std::process::exit(1);
+    }
+    let path_elem = &bracketed_path_elem[1..bracketed_path_elem.len() - 1];
+    if path_elem == "*" {
+        return ArrayIndex::Star;
+    }
+    match path_elem.parse::<usize>() {
+        Ok(i) => ArrayIndex::Idx(i),
+        Err(e) => {
+            error!(
+                "unable to parse array index `{:?}`, error: {:?}",
+                path_elem, e
+            );
+            std::process::exit(1);
+        }
+    }
+}
+
 pub fn traverse(node: &Yaml, head: &str, tail: &[&str], visited: &mut Vec<String>) {
     // if parsed_path still has elements and the node is not a scalar, recurse
     if tail.len() > 0 && !is_scalar(node) {
@@ -12,6 +42,7 @@ pub fn traverse(node: &Yaml, head: &str, tail: &[&str], visited: &mut Vec<String
     }
 }
 
+// TODO(wdeuschle): unit test
 fn is_scalar(node: &Yaml) -> bool {
     match node {
         Yaml::String(_) => true,
@@ -24,6 +55,7 @@ fn is_scalar(node: &Yaml) -> bool {
     }
 }
 
+// TODO(wdeuschle): unit test
 fn recurse(node: &Yaml, head: &str, tail: &[&str], visited: &mut Vec<String>) {
     // for every entry in the node (we're assuming its a map), traverse if the head matches
     match node {
@@ -69,35 +101,7 @@ fn recurse(node: &Yaml, head: &str, tail: &[&str], visited: &mut Vec<String>) {
     }
 }
 
-enum ArrayIndex {
-    Star,
-    Idx(usize),
-}
-
-fn get_array_idx(bracketed_path_elem: &str) -> ArrayIndex {
-    if !bracketed_path_elem.starts_with('[') || !bracketed_path_elem.ends_with(']') {
-        error!(
-            "key `{:?}` is not a valid array index, exiting",
-            bracketed_path_elem
-        );
-        std::process::exit(1);
-    }
-    let path_elem = &bracketed_path_elem[1..bracketed_path_elem.len() - 1];
-    if path_elem == "*" {
-        return ArrayIndex::Star;
-    }
-    match path_elem.parse::<usize>() {
-        Ok(i) => ArrayIndex::Idx(i),
-        Err(e) => {
-            error!(
-                "unable to parse array index `{:?}`, error: {:?}",
-                path_elem, e
-            );
-            std::process::exit(1);
-        }
-    }
-}
-
+// TODO(wdeuschle): unit test
 fn visit(node: &Yaml, _head: &str, tail: &[&str], visited: &mut Vec<String>) {
     if tail.len() == 0 {
         debug!("tail length is 0, visiting leaf node {:?}", node);

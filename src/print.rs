@@ -8,6 +8,7 @@ pub fn print_doc_structure(doc: &Yaml) -> EmitResult {
     Ok(())
 }
 
+// TODO(wdeuschle): integration test
 pub fn get_node_structure(node: &Yaml) -> Result<String, EmitError> {
     let mut out_str = String::new();
     let mut emitter = YamlEmitter::new(&mut out_str);
