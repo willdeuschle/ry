@@ -24,7 +24,7 @@ fn next_special_char_is(s: &str) -> (PathElem, usize) {
     for (idx, c) in s.chars().enumerate() {
         let path_elem = char_is(c);
         if path_elem != PathElem::Char {
-            return (path_elem, idx)
+            return (path_elem, idx);
         }
     }
     (PathElem::EOW, s.len())
@@ -33,10 +33,10 @@ fn next_special_char_is(s: &str) -> (PathElem, usize) {
 fn next_specific_special_char(s: &str, pe: PathElem) -> (bool, usize) {
     for (idx, c) in s.chars().enumerate() {
         if char_is(c) == pe {
-            return (true, idx)
+            return (true, idx);
         }
     }
-    return (false, 0)
+    return (false, 0);
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -69,10 +69,11 @@ pub fn parse_path(path: &str) -> Result<Vec<String>, ParseError> {
                 }
                 parsed_path.push(path[current_idx..dot_idx].to_string());
                 current_idx = dot_idx + 1;
-            },
+            }
             (PathElem::Quote, relative_start_quote_idx) => {
                 let start_quoted_word_idx = current_idx + 1 + relative_start_quote_idx;
-                let (found, relative_end_quote_idx) = next_specific_special_char(&path[start_quoted_word_idx..], PathElem::Quote);
+                let (found, relative_end_quote_idx) =
+                    next_specific_special_char(&path[start_quoted_word_idx..], PathElem::Quote);
                 if found {
                     let end_quote_idx = start_quoted_word_idx + relative_end_quote_idx;
                     parsed_path.push(path[start_quoted_word_idx..end_quote_idx].to_string());
@@ -80,13 +81,14 @@ pub fn parse_path(path: &str) -> Result<Vec<String>, ParseError> {
                 } else {
                     return Err(ParseError::new("invalid path, no closing quote"));
                 }
-            },
+            }
             (PathElem::ArrayOpen, relative_array_open_idx) => {
                 let array_open_idx = current_idx + relative_array_open_idx;
                 if array_open_idx != current_idx {
                     parsed_path.push(path[current_idx..array_open_idx].to_string());
                 }
-                let (found, relateive_array_close_idx) = next_specific_special_char(&path[array_open_idx..], PathElem::ArrayClose);
+                let (found, relateive_array_close_idx) =
+                    next_specific_special_char(&path[array_open_idx..], PathElem::ArrayClose);
                 if found {
                     let array_close_idx = array_open_idx + relateive_array_close_idx;
                     parsed_path.push(path[array_open_idx..array_close_idx + 1].to_string());
@@ -94,19 +96,20 @@ pub fn parse_path(path: &str) -> Result<Vec<String>, ParseError> {
                 } else {
                     return Err(ParseError::new("invalid path, no closing array character"));
                 }
-            },
+            }
             (PathElem::ArrayClose, _) => {
-                return Err(ParseError::new("invalid path, closing array character before opening"));
-            },
+                return Err(ParseError::new(
+                    "invalid path, closing array character before opening",
+                ));
+            }
             (PathElem::Char, c) => {
                 return Err(ParseError::new(&format!("invalid path, found char {}", c)));
-            },
+            }
             (PathElem::EOW, _) => {
                 parsed_path.push(path[current_idx..].to_string());
                 break;
-            },
+            }
         }
     }
     Ok(parsed_path)
 }
-

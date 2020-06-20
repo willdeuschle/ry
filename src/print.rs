@@ -1,6 +1,6 @@
-use yaml_rust::{Yaml, YamlEmitter};
-use yaml_rust::emitter::{EmitResult, EmitError};
 use log::{debug, error};
+use yaml_rust::emitter::{EmitError, EmitResult};
+use yaml_rust::{Yaml, YamlEmitter};
 
 pub fn print_doc_structure(doc: &Yaml) -> EmitResult {
     let out_str = get_node_structure(doc)?;

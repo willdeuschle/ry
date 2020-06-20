@@ -5,7 +5,10 @@ fn test_parse_path() {
 
 #[test]
 fn test_parse_path_with_quotes() {
-    assert_eq!(ry::parse_path("a.\"foo.bar\".c").unwrap(), vec!["a", "foo.bar", "c"]);
+    assert_eq!(
+        ry::parse_path("a.\"foo.bar\".c").unwrap(),
+        vec!["a", "foo.bar", "c"]
+    );
 }
 
 #[test]
@@ -17,13 +20,18 @@ fn test_parse_path_with_one_quote_fails() {
 
 #[test]
 fn test_parse_path_with_array_indexing() {
-    assert_eq!(ry::parse_path("a.foo[10].bar").unwrap(), vec!["a", "foo", "[10]", "bar"]);
+    assert_eq!(
+        ry::parse_path("a.foo[10].bar").unwrap(),
+        vec!["a", "foo", "[10]", "bar"]
+    );
 }
 
 #[test]
 fn test_parse_path_with_one_open_array_panics() {
     let result = ry::parse_path("a.foo[1.bar");
-    let expected = Err(ry::ParseError::new("invalid path, no closing array character"));
+    let expected = Err(ry::ParseError::new(
+        "invalid path, no closing array character",
+    ));
     assert_eq!(result, expected);
 }
 
