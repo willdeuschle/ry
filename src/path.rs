@@ -1,6 +1,21 @@
 use std::fmt;
 
-#[derive(PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParseError(String);
+
+impl ParseError {
+    pub fn new(s: &str) -> ParseError {
+        ParseError(s.to_string())
+    }
+}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[derive(PartialEq, Debug)]
 enum PathElem {
     Char,
     Dot,
@@ -36,21 +51,96 @@ fn next_specific_special_char(s: &str, pe: PathElem) -> (bool, usize) {
             return (true, idx);
         }
     }
-    return (false, 0);
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ParseError(String);
-
-impl ParseError {
-    pub fn new(s: &str) -> ParseError {
-        ParseError(s.to_string())
+    match pe {
+        PathElem::EOW => (true, s.len()),
+        _ => (false, 0),
     }
 }
 
-impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_char_is() {
+        assert_eq!(PathElem::Dot, char_is('.'));
+        assert_eq!(PathElem::Quote, char_is('"'));
+        assert_eq!(PathElem::ArrayOpen, char_is('['));
+        assert_eq!(PathElem::ArrayClose, char_is(']'));
+        assert_eq!(PathElem::Char, char_is('a'));
+    }
+
+    #[test]
+    fn test_next_special_char_is() {
+        assert_eq!((PathElem::Dot, 4), next_special_char_is("asdf.asdf"));
+        assert_eq!((PathElem::Quote, 4), next_special_char_is("asdf\"asdf"));
+        assert_eq!((PathElem::ArrayOpen, 4), next_special_char_is("asdf[asdf"));
+        assert_eq!((PathElem::ArrayClose, 4), next_special_char_is("asdf]asdf"));
+        assert_eq!((PathElem::EOW, 8), next_special_char_is("asdfasdf"));
+    }
+
+    #[test]
+    fn test_next_specific_special_char_is() {
+        assert_eq!(
+            (true, 4),
+            next_specific_special_char("asdf.asdf", PathElem::Dot)
+        );
+        assert_eq!(
+            (false, 0),
+            next_specific_special_char("asdf.asdf", PathElem::Quote)
+        );
+        assert_eq!(
+            (false, 0),
+            next_specific_special_char("asdfasdf", PathElem::Dot)
+        );
+        assert_eq!(
+            (true, 4),
+            next_specific_special_char("asdf\"asdf", PathElem::Quote)
+        );
+        assert_eq!(
+            (false, 0),
+            next_specific_special_char("asdf\"asdf", PathElem::Dot)
+        );
+        assert_eq!(
+            (false, 0),
+            next_specific_special_char("asdfasdf", PathElem::Quote)
+        );
+        assert_eq!(
+            (true, 4),
+            next_specific_special_char("asdf[asdf", PathElem::ArrayOpen)
+        );
+        assert_eq!(
+            (false, 0),
+            next_specific_special_char("asdf[asdf", PathElem::Dot)
+        );
+        assert_eq!(
+            (false, 0),
+            next_specific_special_char("asdfasdf", PathElem::ArrayOpen)
+        );
+        assert_eq!(
+            (true, 4),
+            next_specific_special_char("asdf]asdf", PathElem::ArrayClose)
+        );
+        assert_eq!(
+            (false, 0),
+            next_specific_special_char("asdf]asdf", PathElem::Dot)
+        );
+        assert_eq!(
+            (false, 0),
+            next_specific_special_char("asdfasdf", PathElem::ArrayClose)
+        );
+        assert_eq!(
+            (true, 0),
+            next_specific_special_char("asdfasdf", PathElem::Char)
+        );
+        assert_eq!(
+            (false, 0),
+            next_specific_special_char("asdfasdf", PathElem::Dot)
+        );
+        assert_eq!(
+            (true, 8),
+            next_specific_special_char("asdfasdf", PathElem::EOW)
+        );
     }
 }
 
