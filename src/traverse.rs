@@ -56,6 +56,20 @@ fn is_scalar(node: &Yaml) -> bool {
 }
 
 // TODO(wdeuschle): unit test
+fn key_matches_path(k: &str, p: &str) -> bool {
+    if k == p {
+        return true;
+    }
+    if p.ends_with('*') {
+        let truncated_p = p.trim_end_matches('*');
+        if k.starts_with(truncated_p) {
+            return true;
+        }
+    }
+    false
+}
+
+// TODO(wdeuschle): unit test
 fn recurse(node: &Yaml, head: &str, tail: &[&str], visited: &mut Vec<String>) {
     // for every entry in the node (we're assuming its a map), traverse if the head matches
     match node {
@@ -63,7 +77,7 @@ fn recurse(node: &Yaml, head: &str, tail: &[&str], visited: &mut Vec<String>) {
             for (k, v) in h {
                 match k {
                     Yaml::String(k_str) => {
-                        if k_str == head {
+                        if key_matches_path(k_str, head) {
                             debug!("match on key: {}, traverse", k_str);
                             traverse(v, head, tail, visited);
                         } else {

@@ -102,7 +102,7 @@ a:
 }
 
 #[test]
-fn test_traverse_wildcard() {
+fn test_traverse_array_wildcard() {
     use yaml_rust::YamlLoader;
 
     let docs_str = "
@@ -137,4 +137,52 @@ a:
     ry::traverse(&doc, "", &vec!["a", "b", "[*]", "c"], &mut visited);
     assert_eq!(visited.len(), 1);
     assert_eq!(visited[0], "d");
+}
+
+#[test]
+fn test_traverse_hash_prefix_match() {
+    use yaml_rust::YamlLoader;
+
+    let docs_str = "
+a:
+  item_b:
+    f: 1
+  thing_c:
+    f: 2
+  item_d:
+    f: 3
+  thing_e:
+    f: 4";
+    let doc = &YamlLoader::load_from_str(&docs_str).unwrap()[0];
+
+    let mut visited: Vec<String> = Vec::new();
+    ry::traverse(&doc, "", &vec!["a", "item*", "f"], &mut visited);
+    assert_eq!(visited.len(), 2);
+    assert_eq!(visited[0], "1");
+    assert_eq!(visited[1], "3");
+}
+
+#[test]
+fn test_traverse_hash_wildcard() {
+    use yaml_rust::YamlLoader;
+
+    let docs_str = "
+a:
+  item_b:
+    f: 1
+  thing_c:
+    f: 2
+  item_d:
+    f: 3
+  thing_e:
+    f: 4";
+    let doc = &YamlLoader::load_from_str(&docs_str).unwrap()[0];
+
+    let mut visited: Vec<String> = Vec::new();
+    ry::traverse(&doc, "", &vec!["a", "*", "f",], &mut visited);
+    assert_eq!(visited.len(), 4);
+    assert_eq!(visited[0], "1");
+    assert_eq!(visited[1], "2");
+    assert_eq!(visited[2], "3");
+    assert_eq!(visited[3], "4");
 }
