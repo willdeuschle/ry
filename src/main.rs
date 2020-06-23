@@ -1,5 +1,6 @@
 use clap::{App, Arg};
 use log::{debug, error, LevelFilter, Metadata, Record};
+use std::io::{self, Read};
 use yaml_rust::{Yaml, YamlLoader};
 
 static LOGGER: SimpleLogger = SimpleLogger;
@@ -8,7 +9,6 @@ static LOGGER: SimpleLogger = SimpleLogger;
 // TODO(wdeuschle): implement remaining visit edge cases -> just alias
 // TODO(wdeuschle): at some point, we need to stream the yaml tokens instead of reading the file all
 // at once
-// TODO(wdeuschle): add stdin support
 fn main() {
     let matches = App::new("ry")
         .version("0.0")
@@ -61,10 +61,21 @@ fn main() {
             eprintln!("failed to set logger: `{}`", err);
         });
 
-    let docs_str = std::fs::read_to_string(file_name).unwrap_or_else(|err| {
-        error!("failed to read file `{}`: `{}`", file_name, err);
-        std::process::exit(1);
-    });
+    let docs_str = if file_name == "-" {
+        let mut buffer = String::new();
+        io::stdin()
+            .read_to_string(&mut buffer)
+            .unwrap_or_else(|err| {
+                error!("failed to read from stdin: `{}`", err);
+                std::process::exit(1);
+            });
+        buffer
+    } else {
+        std::fs::read_to_string(file_name).unwrap_or_else(|err| {
+            error!("failed to read file `{}`: `{}`", file_name, err);
+            std::process::exit(1);
+        })
+    };
     let mut docs: &[Yaml] = &YamlLoader::load_from_str(&docs_str).unwrap_or_else(|err| {
         error!("failed to load yaml file `{}`: `{}`", file_name, err);
         std::process::exit(1);
