@@ -6,8 +6,16 @@ use yaml_rust::{Yaml, YamlLoader};
 static LOGGER: SimpleLogger = SimpleLogger;
 
 // TODO(wdeuschle): add unit tests to modules
-// TODO(wdeuschle): implement remaining visit edge cases -> just alias
+// TODO(wdeuschle): rethink the structure
 // TODO(wdeuschle); audit remaining read functionality we're missing
+//                  - implementing aliasing and anchoors
+//                  - printing matching paths
+//                  - printing path only
+//                  - printing path and value
+//                  - collect results into an array
+//                  - print the length of the results
+//                  - add filters
+//                  - print the length of filtered results
 fn main() {
     let matches = App::new("ry")
         .version("0.0")
@@ -30,6 +38,12 @@ fn main() {
                 .takes_value(true)
                 .help("default value to print if there are no matching nodes")
                 .long("defaultValue"),
+        )
+        .arg(
+            Arg::with_name("length")
+                .help("prints length of results")
+                .long("length")
+                .short("L"),
         )
         .arg(
             Arg::with_name("doc_idx")
@@ -146,16 +160,25 @@ fn main() {
         let parsed_path: Vec<&str> = parsed_path_vec.iter().map(String::as_str).collect();
         debug!("parsed path: {:?}", parsed_path);
 
-        let mut visited = Vec::<String>::new();
+        let mut visited = Vec::<&Yaml>::new();
         ry::traverse(doc, "", &parsed_path, &mut visited);
+
+        let default_value: Yaml;
         if visited.len() == 0 && matches.is_present("default_value") {
             let dv = matches.value_of("default_value").unwrap();
             debug!("found no matches, using default value `{}`", dv);
-            visited.push(dv.to_string());
+            default_value = Yaml::from_str(dv);
+            visited.push(&default_value);
         }
         debug!("matched values: {:?}", visited);
-        for value in visited {
-            println!("{}", value);
+        if matches.is_present("length") {
+            for value in visited {
+                ry::print::print_length(value);
+            }
+        } else {
+            for value in visited {
+                println!("{}", ry::print::parse_single_node(value));
+            }
         }
     }
 }

@@ -1,4 +1,3 @@
-use crate::print;
 use log::{debug, error};
 use yaml_rust::Yaml;
 
@@ -32,7 +31,7 @@ fn get_array_idx(bracketed_path_elem: &str) -> ArrayIndex {
     }
 }
 
-pub fn traverse(node: &Yaml, head: &str, tail: &[&str], visited: &mut Vec<String>) {
+pub fn traverse<'a>(node: &'a Yaml, head: &str, tail: &[&str], visited: &mut Vec<&'a Yaml>) {
     // if parsed_path still has elements and the node is not a scalar, recurse
     if tail.len() > 0 && !is_scalar(node) {
         recurse(node, tail[0], &tail[1..], visited)
@@ -70,7 +69,7 @@ fn key_matches_path(k: &str, p: &str) -> bool {
 }
 
 // TODO(wdeuschle): unit test
-fn recurse(node: &Yaml, head: &str, tail: &[&str], visited: &mut Vec<String>) {
+fn recurse<'a>(node: &'a Yaml, head: &str, tail: &[&str], visited: &mut Vec<&'a Yaml>) {
     // for every entry in the node (we're assuming its a map), traverse if the head matches
     match node {
         Yaml::Hash(h) => {
@@ -116,41 +115,33 @@ fn recurse(node: &Yaml, head: &str, tail: &[&str], visited: &mut Vec<String>) {
 }
 
 // TODO(wdeuschle): unit test
-fn visit(node: &Yaml, _head: &str, tail: &[&str], visited: &mut Vec<String>) {
+fn visit<'a>(node: &'a Yaml, _head: &str, tail: &[&str], visited: &mut Vec<&'a Yaml>) {
     if tail.len() == 0 {
         debug!("tail length is 0, visiting leaf node {:?}", node);
         match node {
-            Yaml::String(s) => {
-                visited.push(s.to_owned());
+            s @ Yaml::String(_) => {
+                visited.push(s);
             }
-            Yaml::Integer(i) => {
-                visited.push(i.to_string());
+            i @ Yaml::Integer(_) => {
+                visited.push(i);
             }
-            Yaml::Real(f) => {
-                visited.push(f.to_string());
+            f @ Yaml::Real(_) => {
+                visited.push(f);
             }
-            Yaml::Boolean(b) => {
-                visited.push(b.to_string());
+            b @ Yaml::Boolean(_) => {
+                visited.push(b);
             }
             h @ Yaml::Hash(_) => {
-                let s = print::get_node_structure(h).unwrap_or_else(|err| {
-                    error!("failed to parse map value `{:?}`: {}", h, err);
-                    std::process::exit(1);
-                });
-                visited.push(s);
+                visited.push(h);
             }
-            Yaml::Null => {
-                visited.push("null".to_string());
+            n @ Yaml::Null => {
+                visited.push(n);
             }
-            Yaml::BadValue => {
-                error!("visited node `{:?}` is a corrupted value, continuing", node);
+            b @ Yaml::BadValue => {
+                visited.push(b);
             }
             v @ Yaml::Array(_) => {
-                let s = print::get_node_structure(v).unwrap_or_else(|err| {
-                    error!("failed to parse array value `{:?}`: {}", v, err);
-                    std::process::exit(1);
-                });
-                visited.push(s);
+                visited.push(v);
             }
             _a @ Yaml::Alias(_) => {
                 panic!("alias type node yet implemented");
