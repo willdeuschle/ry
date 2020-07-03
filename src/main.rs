@@ -7,8 +7,7 @@ static LOGGER: SimpleLogger = SimpleLogger;
 
 // TODO(wdeuschle): add unit tests to modules
 // TODO(wdeuschle): implement remaining visit edge cases -> just alias
-// TODO(wdeuschle): at some point, we need to stream the yaml tokens instead of reading the file all
-// at once
+// TODO(wdeuschle); audit remaining read functionality we're missing
 fn main() {
     let matches = App::new("ry")
         .version("0.0")
