@@ -1,6 +1,12 @@
 use log::{debug, error};
 use yaml_rust::Yaml;
 
+#[derive(Debug)]
+pub struct VisitedNode<'a> {
+    pub yml: &'a Yaml,
+    pub path: String,
+}
+
 enum ArrayIndex {
     Star,
     Idx(usize),
@@ -31,13 +37,19 @@ fn get_array_idx(bracketed_path_elem: &str) -> ArrayIndex {
     }
 }
 
-pub fn traverse<'a>(node: &'a Yaml, head: &str, tail: &[&str], visited: &mut Vec<&'a Yaml>) {
+pub fn traverse<'a>(
+    node: &'a Yaml,
+    head: &str,
+    tail: &[&str],
+    path: String,
+    visited: &mut Vec<VisitedNode<'a>>,
+) {
     // if parsed_path still has elements and the node is not a scalar, recurse
     if tail.len() > 0 && !is_scalar(node) {
-        recurse(node, tail[0], &tail[1..], visited)
+        recurse(node, tail[0], &tail[1..], path, visited)
     } else {
         // the parsed path is empty or we have a scalar, try visiting
-        visit(node, head, tail, visited);
+        visit(node, head, tail, path, visited);
     }
 }
 
@@ -69,7 +81,13 @@ fn key_matches_path(k: &str, p: &str) -> bool {
 }
 
 // TODO(wdeuschle): unit test
-fn recurse<'a>(node: &'a Yaml, head: &str, tail: &[&str], visited: &mut Vec<&'a Yaml>) {
+fn recurse<'a>(
+    node: &'a Yaml,
+    head: &str,
+    tail: &[&str],
+    path: String,
+    visited: &mut Vec<VisitedNode<'a>>,
+) {
     // for every entry in the node (we're assuming its a map), traverse if the head matches
     match node {
         Yaml::Hash(h) => {
@@ -78,7 +96,12 @@ fn recurse<'a>(node: &'a Yaml, head: &str, tail: &[&str], visited: &mut Vec<&'a 
                     Yaml::String(k_str) => {
                         if key_matches_path(k_str, head) {
                             debug!("match on key: {}, traverse", k_str);
-                            traverse(v, head, tail, visited);
+                            let mut new_path = path.clone();
+                            if new_path.len() > 0 {
+                                new_path.push_str(".");
+                            }
+                            new_path.push_str(k_str);
+                            traverse(v, head, tail, new_path, visited);
                         } else {
                             debug!("did not match on key: {}, continue", k_str);
                         }
@@ -103,7 +126,9 @@ fn recurse<'a>(node: &'a Yaml, head: &str, tail: &[&str], visited: &mut Vec<&'a 
             };
             debug!("match on array indices: {:?}, traverse", array_indices);
             for array_idx in array_indices {
-                traverse(&v[array_idx], head, tail, visited);
+                let mut new_path = path.clone();
+                new_path.push_str(&format!("[{}]", array_idx));
+                traverse(&v[array_idx], head, tail, new_path, visited);
             }
         }
         Yaml::Alias(_a) => panic!("recursing on aliases not implemented yet"),
@@ -115,33 +140,63 @@ fn recurse<'a>(node: &'a Yaml, head: &str, tail: &[&str], visited: &mut Vec<&'a 
 }
 
 // TODO(wdeuschle): unit test
-fn visit<'a>(node: &'a Yaml, _head: &str, tail: &[&str], visited: &mut Vec<&'a Yaml>) {
+fn visit<'a>(
+    node: &'a Yaml,
+    _head: &str,
+    tail: &[&str],
+    path: String,
+    visited: &mut Vec<VisitedNode<'a>>,
+) {
     if tail.len() == 0 {
         debug!("tail length is 0, visiting leaf node {:?}", node);
         match node {
             s @ Yaml::String(_) => {
-                visited.push(s);
+                visited.push(VisitedNode {
+                    yml: s,
+                    path: path.clone(),
+                });
             }
             i @ Yaml::Integer(_) => {
-                visited.push(i);
+                visited.push(VisitedNode {
+                    yml: i,
+                    path: path.clone(),
+                });
             }
             f @ Yaml::Real(_) => {
-                visited.push(f);
+                visited.push(VisitedNode {
+                    yml: f,
+                    path: path.clone(),
+                });
             }
             b @ Yaml::Boolean(_) => {
-                visited.push(b);
+                visited.push(VisitedNode {
+                    yml: b,
+                    path: path.clone(),
+                });
             }
             h @ Yaml::Hash(_) => {
-                visited.push(h);
+                visited.push(VisitedNode {
+                    yml: h,
+                    path: path.clone(),
+                });
             }
             n @ Yaml::Null => {
-                visited.push(n);
+                visited.push(VisitedNode {
+                    yml: n,
+                    path: path.clone(),
+                });
             }
             b @ Yaml::BadValue => {
-                visited.push(b);
+                visited.push(VisitedNode {
+                    yml: b,
+                    path: path.clone(),
+                });
             }
             v @ Yaml::Array(_) => {
-                visited.push(v);
+                visited.push(VisitedNode {
+                    yml: v,
+                    path: path.clone(),
+                });
             }
             _a @ Yaml::Alias(_) => {
                 panic!("alias type node yet implemented");

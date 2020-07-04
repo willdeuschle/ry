@@ -9,9 +9,7 @@ static LOGGER: SimpleLogger = SimpleLogger;
 // TODO(wdeuschle): rethink the structure
 // TODO(wdeuschle); audit remaining read functionality we're missing
 //                  - implementing aliasing and anchors
-//                  - printing matching paths
-//                  - printing path only
-//                  - printing path and value
+//                  - path printing testing
 //                  - collect results into an array
 //                  - add filters
 //                  - print the length of filtered results
@@ -43,6 +41,13 @@ fn main() {
                 .help("prints length of results")
                 .long("length")
                 .short("L"),
+        )
+        .arg(
+            Arg::with_name("print_mode")
+                .takes_value(true)
+                .help("what mode to print results in")
+                .long("printMode")
+                .short("p"),
         )
         .arg(
             Arg::with_name("doc_idx")
@@ -159,24 +164,45 @@ fn main() {
         let parsed_path: Vec<&str> = parsed_path_vec.iter().map(String::as_str).collect();
         debug!("parsed path: {:?}", parsed_path);
 
-        let mut visited = Vec::<&Yaml>::new();
-        ry::traverse(doc, "", &parsed_path, &mut visited);
+        let mut visited = Vec::<ry::VisitedNode>::new();
+        ry::traverse(doc, "", &parsed_path, String::new(), &mut visited);
 
-        let default_value: Yaml;
+        let default_yml: Yaml;
+        let default_visited_node: ry::VisitedNode;
         if visited.len() == 0 && matches.is_present("default_value") {
             let dv = matches.value_of("default_value").unwrap();
             debug!("found no matches, using default value `{}`", dv);
-            default_value = Yaml::from_str(dv);
-            visited.push(&default_value);
+            default_yml = Yaml::from_str(dv);
+            default_visited_node = ry::VisitedNode {
+                yml: &default_yml,
+                path: "".to_string(),
+            };
+            visited.push(default_visited_node);
         }
         debug!("matched values: {:?}", visited);
         if matches.is_present("length") {
             for value in visited {
-                println!("{}", ry::convert_length(value));
+                println!("{}", ry::convert_length(value.yml));
             }
         } else {
-            for value in visited {
-                println!("{}", ry::convert_single_node(value));
+            let print_mode = parse_print_mode(matches.value_of("print_mode").unwrap_or("v"));
+            debug!("print_mode: {:?}", print_mode);
+            match print_mode {
+                PrintMode::Path => {
+                    for value in visited {
+                        println!("{}", value.path);
+                    }
+                }
+                PrintMode::Value => {
+                    for value in visited {
+                        println!("{}", ry::convert_single_node(value.yml));
+                    }
+                }
+                PrintMode::ValueAndPath => {
+                    for value in visited {
+                        println!("{}: {}", value.path, ry::convert_single_node(value.yml));
+                    }
+                }
             }
         }
     }
@@ -196,4 +222,21 @@ impl log::Log for SimpleLogger {
     }
 
     fn flush(&self) {}
+}
+
+#[derive(Debug)]
+enum PrintMode {
+    Value,
+    Path,
+    ValueAndPath,
+}
+
+fn parse_print_mode(mode: &str) -> PrintMode {
+    match mode {
+        "v" => PrintMode::Value,
+        "p" => PrintMode::Path,
+        "pv" => PrintMode::ValueAndPath,
+        "vp" => PrintMode::ValueAndPath,
+        _ => PrintMode::Value,
+    }
 }
