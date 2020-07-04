@@ -8,12 +8,11 @@ static LOGGER: SimpleLogger = SimpleLogger;
 // TODO(wdeuschle): add unit tests to modules
 // TODO(wdeuschle): rethink the structure
 // TODO(wdeuschle); audit remaining read functionality we're missing
-//                  - implementing aliasing and anchoors
+//                  - implementing aliasing and anchors
 //                  - printing matching paths
 //                  - printing path only
 //                  - printing path and value
 //                  - collect results into an array
-//                  - print the length of the results
 //                  - add filters
 //                  - print the length of filtered results
 fn main() {
@@ -138,7 +137,7 @@ fn main() {
 
     for ref doc in docs {
         if log_level == LevelFilter::Debug {
-            ry::print_doc_structure(doc).unwrap_or_else(|err| {
+            ry::debug_print_doc_structure(doc).unwrap_or_else(|err| {
                 error!(
                     "unable to print display document from file `{}`: {}",
                     file_name, err
@@ -173,11 +172,11 @@ fn main() {
         debug!("matched values: {:?}", visited);
         if matches.is_present("length") {
             for value in visited {
-                ry::print::print_length(value);
+                println!("{}", ry::convert_length(value));
             }
         } else {
             for value in visited {
-                println!("{}", ry::print::parse_single_node(value));
+                println!("{}", ry::convert_single_node(value));
             }
         }
     }

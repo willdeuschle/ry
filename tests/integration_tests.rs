@@ -1,5 +1,5 @@
+use ry::convert::convert_single_node;
 use yaml_rust::Yaml;
-use ry::print::parse_single_node;
 
 #[test]
 fn test_parse_path() {
@@ -51,7 +51,7 @@ a:
     let mut visited: Vec<&Yaml> = Vec::new();
     ry::traverse(&doc, "", &vec!["a", "b", "c"], &mut visited);
     assert_eq!(visited.len(), 1);
-    assert_eq!(parse_single_node(visited[0]), "2");
+    assert_eq!(convert_single_node(visited[0]), "2");
 }
 
 #[test]
@@ -67,7 +67,7 @@ a:
     let mut visited: Vec<&Yaml> = Vec::new();
     ry::traverse(&doc, "", &vec!["a", "b"], &mut visited);
     assert_eq!(visited.len(), 1);
-    assert_eq!(parse_single_node(visited[0]), "c: 2");
+    assert_eq!(convert_single_node(visited[0]), "c: 2");
 }
 
 #[test]
@@ -83,7 +83,7 @@ a:
     let mut visited: Vec<&Yaml> = Vec::new();
     ry::traverse(&doc, "", &vec!["a", "foo.bar", "c"], &mut visited);
     assert_eq!(visited.len(), 1);
-    assert_eq!(parse_single_node(visited[0]), "2");
+    assert_eq!(convert_single_node(visited[0]), "2");
 }
 
 #[test]
@@ -101,7 +101,7 @@ a:
     let mut visited: Vec<&Yaml> = Vec::new();
     ry::traverse(&doc, "", &vec!["a", "b", "[1]"], &mut visited);
     assert_eq!(visited.len(), 1);
-    assert_eq!(parse_single_node(visited[0]), "2");
+    assert_eq!(convert_single_node(visited[0]), "2");
 }
 
 #[test]
@@ -119,9 +119,9 @@ a:
     let mut visited: Vec<&Yaml> = Vec::new();
     ry::traverse(&doc, "", &vec!["a", "b", "[*]"], &mut visited);
     assert_eq!(visited.len(), 3);
-    assert_eq!(parse_single_node(visited[0]), "1");
-    assert_eq!(parse_single_node(visited[1]), "2");
-    assert_eq!(parse_single_node(visited[2]), "3");
+    assert_eq!(convert_single_node(visited[0]), "1");
+    assert_eq!(convert_single_node(visited[1]), "2");
+    assert_eq!(convert_single_node(visited[2]), "3");
 }
 
 #[test]
@@ -139,7 +139,7 @@ a:
     let mut visited: Vec<&Yaml> = Vec::new();
     ry::traverse(&doc, "", &vec!["a", "b", "[*]", "c"], &mut visited);
     assert_eq!(visited.len(), 1);
-    assert_eq!(parse_single_node(visited[0]), "d");
+    assert_eq!(convert_single_node(visited[0]), "d");
 }
 
 #[test]
@@ -161,8 +161,8 @@ a:
     let mut visited: Vec<&Yaml> = Vec::new();
     ry::traverse(&doc, "", &vec!["a", "item*", "f"], &mut visited);
     assert_eq!(visited.len(), 2);
-    assert_eq!(parse_single_node(visited[0]), "1");
-    assert_eq!(parse_single_node(visited[1]), "3");
+    assert_eq!(convert_single_node(visited[0]), "1");
+    assert_eq!(convert_single_node(visited[1]), "3");
 }
 
 #[test]
@@ -182,10 +182,10 @@ a:
     let doc = &YamlLoader::load_from_str(&docs_str).unwrap()[0];
 
     let mut visited: Vec<&Yaml> = Vec::new();
-    ry::traverse(&doc, "", &vec!["a", "*", "f",], &mut visited);
+    ry::traverse(&doc, "", &vec!["a", "*", "f"], &mut visited);
     assert_eq!(visited.len(), 4);
-    assert_eq!(parse_single_node(visited[0]), "1");
-    assert_eq!(parse_single_node(visited[1]), "2");
-    assert_eq!(parse_single_node(visited[2]), "3");
-    assert_eq!(parse_single_node(visited[3]), "4");
+    assert_eq!(convert_single_node(visited[0]), "1");
+    assert_eq!(convert_single_node(visited[1]), "2");
+    assert_eq!(convert_single_node(visited[2]), "3");
+    assert_eq!(convert_single_node(visited[3]), "4");
 }

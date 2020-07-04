@@ -1,7 +1,7 @@
+pub mod convert;
 pub mod path;
-pub mod print;
 pub mod traverse;
 
+pub use convert::{convert_length, convert_single_node, debug_print_doc_structure};
 pub use path::{parse_path, ParseError};
-pub use print::print_doc_structure;
 pub use traverse::traverse;
