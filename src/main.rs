@@ -50,6 +50,13 @@ fn main() {
                 .short("p"),
         )
         .arg(
+            Arg::with_name("collect")
+                .takes_value(false)
+                .help("collect results into an array")
+                .long("collect")
+                .short("C"),
+        )
+        .arg(
             Arg::with_name("doc_idx")
                 .takes_value(true)
                 .help("document index to search")
@@ -187,20 +194,30 @@ fn main() {
         } else {
             let print_mode = parse_print_mode(matches.value_of("print_mode").unwrap_or("v"));
             debug!("print_mode: {:?}", print_mode);
+            let collect_prepend = if matches.is_present("collect") {
+                "- "
+            } else {
+                ""
+            };
             match print_mode {
                 PrintMode::Path => {
                     for value in visited {
-                        println!("{}", value.path);
+                        println!("{}{}", collect_prepend, value.path);
                     }
                 }
                 PrintMode::Value => {
                     for value in visited {
-                        println!("{}", ry::convert_single_node(value.yml));
+                        println!("{}{}", collect_prepend, ry::convert_single_node(value.yml));
                     }
                 }
                 PrintMode::ValueAndPath => {
                     for value in visited {
-                        println!("{}: {}", value.path, ry::convert_single_node(value.yml));
+                        println!(
+                            "{}{}: {}",
+                            collect_prepend,
+                            value.path,
+                            ry::convert_single_node(value.yml)
+                        );
                     }
                 }
             }
