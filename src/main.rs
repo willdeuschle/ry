@@ -6,9 +6,9 @@ use yaml_rust::{Yaml, YamlLoader};
 static LOGGER: SimpleLogger = SimpleLogger;
 
 // TODO(wdeuschle): add unit tests to modules, testing audit
-// TODO(wdeuschle): rethink the structure
+// TODO(wdeuschle): rethink/clean the structure
 // TODO(wdeuschle); audit remaining read functionality we're missing
-//                  - implementing aliasing and anchors
+//                  - merge keys not yet supported in yaml_rust: https://github.com/chyh1990/yaml-rust/issues/68
 //                  - deep splatting
 fn main() {
     let matches = App::new("ry")
