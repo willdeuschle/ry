@@ -1,3 +1,4 @@
+use log::error;
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -22,6 +23,8 @@ enum PathElem {
     Quote,
     ArrayOpen,
     ArrayClose,
+    ParenOpen,
+    ParenClose,
     EOW,
 }
 
@@ -31,6 +34,8 @@ fn char_is(c: char) -> PathElem {
         '"' => PathElem::Quote,
         '[' => PathElem::ArrayOpen,
         ']' => PathElem::ArrayClose,
+        '(' => PathElem::ParenOpen,
+        ')' => PathElem::ParenClose,
         _ => PathElem::Char,
     }
 }
@@ -76,6 +81,8 @@ mod tests {
         assert_eq!((PathElem::Quote, 4), next_special_char_is("asdf\"asdf"));
         assert_eq!((PathElem::ArrayOpen, 4), next_special_char_is("asdf[asdf"));
         assert_eq!((PathElem::ArrayClose, 4), next_special_char_is("asdf]asdf"));
+        assert_eq!((PathElem::ParenOpen, 4), next_special_char_is("asdf(asdf"));
+        assert_eq!((PathElem::ParenClose, 4), next_special_char_is("asdf)asdf"));
         assert_eq!((PathElem::EOW, 8), next_special_char_is("asdfasdf"));
     }
 
@@ -110,6 +117,10 @@ mod tests {
             next_specific_special_char("asdf[asdf", PathElem::ArrayOpen)
         );
         assert_eq!(
+            (true, 4),
+            next_specific_special_char("asdf(asdf", PathElem::ParenOpen)
+        );
+        assert_eq!(
             (false, 0),
             next_specific_special_char("asdf[asdf", PathElem::Dot)
         );
@@ -123,11 +134,23 @@ mod tests {
         );
         assert_eq!(
             (false, 0),
+            next_specific_special_char("asdfasdf", PathElem::ParenOpen)
+        );
+        assert_eq!(
+            (true, 4),
+            next_specific_special_char("asdf)asdf", PathElem::ParenClose)
+        );
+        assert_eq!(
+            (false, 0),
             next_specific_special_char("asdf]asdf", PathElem::Dot)
         );
         assert_eq!(
             (false, 0),
             next_specific_special_char("asdfasdf", PathElem::ArrayClose)
+        );
+        assert_eq!(
+            (false, 0),
+            next_specific_special_char("asdfasdf", PathElem::ParenClose)
         );
         assert_eq!(
             (true, 0),
@@ -142,6 +165,18 @@ mod tests {
             next_specific_special_char("asdfasdf", PathElem::EOW)
         );
     }
+}
+
+pub fn parse_path_into(path: &str) -> Vec<String> {
+    let parsed_path_res = parse_path(path);
+    let parsed_path_vec: Vec<String> = match parsed_path_res {
+        Ok(_) => parsed_path_res.unwrap(),
+        Err(e) => {
+            error!("failed to parse path, error: {}", e);
+            std::process::exit(1);
+        }
+    };
+    parsed_path_vec
 }
 
 pub fn parse_path(path: &str) -> Result<Vec<String>, ParseError> {
@@ -177,19 +212,39 @@ pub fn parse_path(path: &str) -> Result<Vec<String>, ParseError> {
                 if array_open_idx != current_idx {
                     parsed_path.push(path[current_idx..array_open_idx].to_string());
                 }
-                let (found, relateive_array_close_idx) =
+                let (found, relative_array_close_idx) =
                     next_specific_special_char(&path[array_open_idx..], PathElem::ArrayClose);
                 if found {
-                    let array_close_idx = array_open_idx + relateive_array_close_idx;
+                    let array_close_idx = array_open_idx + relative_array_close_idx;
                     parsed_path.push(path[array_open_idx..array_close_idx + 1].to_string());
                     current_idx = array_close_idx + 1;
                 } else {
                     return Err(ParseError::new("invalid path, no closing array character"));
                 }
             }
+            (PathElem::ParenOpen, relative_paren_open_idx) => {
+                let paren_open_idx = current_idx + relative_paren_open_idx;
+                if paren_open_idx != current_idx {
+                    parsed_path.push(path[current_idx..paren_open_idx].to_string());
+                }
+                let (found, relative_paren_close_idx) =
+                    next_specific_special_char(&path[paren_open_idx..], PathElem::ParenClose);
+                if found {
+                    let paren_close_idx = paren_open_idx + relative_paren_close_idx;
+                    parsed_path.push(path[paren_open_idx..paren_close_idx + 1].to_string());
+                    current_idx = paren_close_idx + 1;
+                } else {
+                    return Err(ParseError::new("invalid path, no closing paren character"));
+                }
+            }
             (PathElem::ArrayClose, _) => {
                 return Err(ParseError::new(
                     "invalid path, closing array character before opening",
+                ));
+            }
+            (PathElem::ParenClose, _) => {
+                return Err(ParseError::new(
+                    "invalid path, closing paren character before opening",
                 ));
             }
             (PathElem::Char, c) => {
@@ -202,4 +257,15 @@ pub fn parse_path(path: &str) -> Result<Vec<String>, ParseError> {
         }
     }
     Ok(parsed_path)
+}
+
+// TODO(wdeuschle): test
+pub fn parse_child_filter(filter: &str) -> Result<[&str; 2], ParseError> {
+    let split_filter: Vec<&str> = filter.split("==").collect();
+    if split_filter.len() != 2 {
+        return Err(ParseError::new("invalid filter"));
+    }
+    let mut split_filter_array = ["", ""];
+    split_filter_array.copy_from_slice(&split_filter);
+    Ok(split_filter_array)
 }

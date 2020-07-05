@@ -10,8 +10,8 @@ static LOGGER: SimpleLogger = SimpleLogger;
 // TODO(wdeuschle); audit remaining read functionality we're missing
 //                  - implementing aliasing and anchors
 //                  - path printing testing
-//                  - collect results into an array
 //                  - add filters
+//                  - deep splatting
 //                  - print the length of filtered results
 fn main() {
     let matches = App::new("ry")
@@ -159,16 +159,7 @@ fn main() {
         }
 
         // parse path
-        // TODO: can this be cleaned up?
-        let parsed_path_res = ry::parse_path(path);
-        let parsed_path_vec: Vec<String> = match parsed_path_res {
-            Ok(_) => parsed_path_res.unwrap(),
-            Err(e) => {
-                error!("failed to parse path, error: {}", e);
-                std::process::exit(1);
-            }
-        };
-        let parsed_path: Vec<&str> = parsed_path_vec.iter().map(String::as_str).collect();
+        let parsed_path = ry::parse_path_into(path);
         debug!("parsed path: {:?}", parsed_path);
 
         let mut visited = Vec::<ry::VisitedNode>::new();

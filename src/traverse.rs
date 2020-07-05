@@ -7,26 +7,66 @@ pub struct VisitedNode<'a> {
     pub path: String,
 }
 
-enum ArrayIndex {
+enum ArrayIndices {
     Star,
-    Idx(usize),
+    Indices(Vec<usize>),
 }
 
 // TODO(wdeuschle): unit test
-fn get_array_idx(bracketed_path_elem: &str) -> ArrayIndex {
-    if !bracketed_path_elem.starts_with('[') || !bracketed_path_elem.ends_with(']') {
+fn get_array_idx(path_elem: &str, array_node: &Vec<Yaml>) -> ArrayIndices {
+    debug!("getting array index for path_elem: {}", path_elem);
+    if path_elem.starts_with('(') && path_elem.ends_with(')') {
+        let path_elem = &path_elem[1..path_elem.len() - 1];
+        if path_elem == "*" {
+            return ArrayIndices::Star;
+        }
+        let filter_key_and_value =
+            crate::path::parse_child_filter(path_elem).unwrap_or_else(|err| {
+                error!("unable to parse child filter, error: {:?}", err);
+                std::process::exit(1);
+            });
+        let (filter_path, filter_value) = (filter_key_and_value[0], filter_key_and_value[1]);
+
+        // parse filter_path
+        let parsed_path = crate::path::parse_path_into(filter_path);
+        debug!("parsed path for child filtering: {:?}", parsed_path);
+
+        // run a traverse search again against each node to determine if this is a valid child path
+        let mut indices: Vec<usize> = vec![];
+        for (idx, array_elem) in array_node.iter().enumerate() {
+            let mut visited = Vec::<VisitedNode>::new();
+            crate::traverse::traverse(array_elem, "", &parsed_path, String::new(), &mut visited);
+            if visited.len() != 1 {
+                debug!(
+                    "array_elem did not match child filter, continuing: {:?}",
+                    array_elem
+                );
+                continue;
+            }
+            let ref visited_elem = visited[0];
+            if key_matches_path(
+                &crate::convert::convert_single_node(visited_elem.yml),
+                filter_value, // path element for child filter
+            ) {
+                debug!("array_elem matched child filter: {:?}", array_elem);
+                indices.push(idx);
+            }
+        }
+        debug!("child filtering matched indices: {:?}", indices);
+        return ArrayIndices::Indices(indices);
+    } else if !path_elem.starts_with('[') || !path_elem.ends_with(']') {
         error!(
-            "key `{:?}` is not a valid array index, exiting",
-            bracketed_path_elem
+            "key `{:?}` is neither a valid array index nor child filter, exiting",
+            path_elem
         );
         std::process::exit(1);
     }
-    let path_elem = &bracketed_path_elem[1..bracketed_path_elem.len() - 1];
+    let path_elem = &path_elem[1..path_elem.len() - 1];
     if path_elem == "*" {
-        return ArrayIndex::Star;
+        return ArrayIndices::Star;
     }
     match path_elem.parse::<usize>() {
-        Ok(i) => ArrayIndex::Idx(i),
+        Ok(i) => ArrayIndices::Indices(vec![i]),
         Err(e) => {
             error!(
                 "unable to parse array index `{:?}`, error: {:?}",
@@ -40,13 +80,13 @@ fn get_array_idx(bracketed_path_elem: &str) -> ArrayIndex {
 pub fn traverse<'a>(
     node: &'a Yaml,
     head: &str,
-    tail: &[&str],
+    tail: &[String],
     path: String,
     visited: &mut Vec<VisitedNode<'a>>,
 ) {
     // if parsed_path still has elements and the node is not a scalar, recurse
     if tail.len() > 0 && !is_scalar(node) {
-        recurse(node, tail[0], &tail[1..], path, visited)
+        recurse(node, &tail[0], &tail[1..], path, visited)
     } else {
         // the parsed path is empty or we have a scalar, try visiting
         visit(node, head, tail, path, visited);
@@ -84,7 +124,7 @@ fn key_matches_path(k: &str, p: &str) -> bool {
 fn recurse<'a>(
     node: &'a Yaml,
     head: &str,
-    tail: &[&str],
+    tail: &[String],
     path: String,
     visited: &mut Vec<VisitedNode<'a>>,
 ) {
@@ -114,14 +154,16 @@ fn recurse<'a>(
             }
         }
         Yaml::Array(v) => {
-            let array_indices: Vec<usize> = match get_array_idx(head) {
-                ArrayIndex::Star => (0..v.len()).collect(),
-                ArrayIndex::Idx(i) => {
-                    if i >= v.len() {
-                        debug!("array index {} too large, don't recurse", i);
-                        return;
+            let array_indices: Vec<usize> = match get_array_idx(head, v) {
+                ArrayIndices::Star => (0..v.len()).collect(),
+                ArrayIndices::Indices(indices) => {
+                    for i in indices.iter() {
+                        if *i >= v.len() {
+                            debug!("array index {} too large, don't recurse", i);
+                            return;
+                        }
                     }
-                    vec![i]
+                    indices
                 }
             };
             debug!("match on array indices: {:?}, traverse", array_indices);
@@ -143,7 +185,7 @@ fn recurse<'a>(
 fn visit<'a>(
     node: &'a Yaml,
     _head: &str,
-    tail: &[&str],
+    tail: &[String],
     path: String,
     visited: &mut Vec<VisitedNode<'a>>,
 ) {

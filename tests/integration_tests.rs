@@ -29,7 +29,24 @@ fn test_parse_path_with_array_indexing() {
 }
 
 #[test]
+fn test_parse_path_with_parens() {
+    assert_eq!(
+        ry::parse_path("a.(b.d==cat*).c").unwrap(),
+        vec!["a", "(b.d==cat*)", "c"]
+    );
+}
+
+#[test]
 fn test_parse_path_with_one_open_array_panics() {
+    let result = ry::parse_path("a.(b.d==cat*.c");
+    let expected = Err(ry::ParseError::new(
+        "invalid path, no closing paren character",
+    ));
+    assert_eq!(result, expected);
+}
+
+#[test]
+fn test_parse_path_with_one_open_paren_panics() {
     let result = ry::parse_path("a.foo[1.bar");
     let expected = Err(ry::ParseError::new(
         "invalid path, no closing array character",
@@ -48,7 +65,13 @@ a:
     let doc = &YamlLoader::load_from_str(&docs_str).unwrap()[0];
 
     let mut visited = Vec::<ry::VisitedNode>::new();
-    ry::traverse(&doc, "", &vec!["a", "b", "c"], String::new(), &mut visited);
+    ry::traverse(
+        &doc,
+        "",
+        &vec!["a".to_string(), "b".to_string(), "c".to_string()],
+        String::new(),
+        &mut visited,
+    );
     assert_eq!(visited.len(), 1);
     assert_eq!(convert_single_node(visited[0].yml), "2");
 }
@@ -64,7 +87,13 @@ a:
     let doc = &YamlLoader::load_from_str(&docs_str).unwrap()[0];
 
     let mut visited = Vec::<ry::VisitedNode>::new();
-    ry::traverse(&doc, "", &vec!["a", "b"], String::new(), &mut visited);
+    ry::traverse(
+        &doc,
+        "",
+        &vec!["a".to_string(), "b".to_string()],
+        String::new(),
+        &mut visited,
+    );
     assert_eq!(visited.len(), 1);
     assert_eq!(convert_single_node(visited[0].yml), "c: 2");
 }
@@ -83,7 +112,7 @@ a:
     ry::traverse(
         &doc,
         "",
-        &vec!["a", "foo.bar", "c"],
+        &vec!["a".to_string(), "foo.bar".to_string(), "c".to_string()],
         String::new(),
         &mut visited,
     );
@@ -107,7 +136,7 @@ a:
     ry::traverse(
         &doc,
         "",
-        &vec!["a", "b", "[1]"],
+        &vec!["a".to_string(), "b".to_string(), "[1]".to_string()],
         String::new(),
         &mut visited,
     );
@@ -131,7 +160,7 @@ a:
     ry::traverse(
         &doc,
         "",
-        &vec!["a", "b", "[*]"],
+        &vec!["a".to_string(), "b".to_string(), "[*]".to_string()],
         String::new(),
         &mut visited,
     );
@@ -157,7 +186,12 @@ a:
     ry::traverse(
         &doc,
         "",
-        &vec!["a", "b", "[*]", "c"],
+        &vec![
+            "a".to_string(),
+            "b".to_string(),
+            "[*]".to_string(),
+            "c".to_string(),
+        ],
         String::new(),
         &mut visited,
     );
@@ -185,7 +219,7 @@ a:
     ry::traverse(
         &doc,
         "",
-        &vec!["a", "item*", "f"],
+        &vec!["a".to_string(), "item*".to_string(), "f".to_string()],
         String::new(),
         &mut visited,
     );
@@ -211,10 +245,101 @@ a:
     let doc = &YamlLoader::load_from_str(&docs_str).unwrap()[0];
 
     let mut visited = Vec::<ry::VisitedNode>::new();
-    ry::traverse(&doc, "", &vec!["a", "*", "f"], String::new(), &mut visited);
+    ry::traverse(
+        &doc,
+        "",
+        &vec!["a".to_string(), "*".to_string(), "f".to_string()],
+        String::new(),
+        &mut visited,
+    );
     assert_eq!(visited.len(), 4);
     assert_eq!(convert_single_node(visited[0].yml), "1");
     assert_eq!(convert_single_node(visited[1].yml), "2");
     assert_eq!(convert_single_node(visited[2].yml), "3");
     assert_eq!(convert_single_node(visited[3].yml), "4");
+}
+
+#[test]
+fn test_child_array_filtering() {
+    use yaml_rust::YamlLoader;
+
+    let docs_str = "
+a:
+  - b:
+      c: thing0
+      d: leopard
+    ba: fast
+  - b:
+      c: thing1 # MATCHES
+      d: cat
+    ba: meowy
+  - b:
+      c: thing2
+      d: caterpillar
+    ba: icky
+  - b:
+      c: thing3 # MATCHES
+      d: cat
+    ba: also meowy";
+    let doc = &YamlLoader::load_from_str(&docs_str).unwrap()[0];
+
+    let mut visited = Vec::<ry::VisitedNode>::new();
+    ry::traverse(
+        &doc,
+        "",
+        &vec![
+            "a".to_string(),
+            "(b.d==cat)".to_string(),
+            "b".to_string(),
+            "c".to_string(),
+        ],
+        String::new(),
+        &mut visited,
+    );
+    assert_eq!(visited.len(), 2);
+    assert_eq!(convert_single_node(visited[0].yml), "thing1");
+    assert_eq!(convert_single_node(visited[1].yml), "thing3");
+}
+
+#[test]
+fn test_child_array_filtering_with_wildcard() {
+    use yaml_rust::YamlLoader;
+
+    let docs_str = "
+a:
+  - b:
+      c: thing0
+      d: leopard
+    ba: fast
+  - b:
+      c: thing1 # MATCHES
+      d: cat
+    ba: meowy
+  - b:
+      c: thing2 # MATCHES
+      d: caterpillar
+    ba: icky
+  - b:
+      c: thing3 # MATCHES
+      d: cat
+    ba: also meowy";
+    let doc = &YamlLoader::load_from_str(&docs_str).unwrap()[0];
+
+    let mut visited = Vec::<ry::VisitedNode>::new();
+    ry::traverse(
+        &doc,
+        "",
+        &vec![
+            "a".to_string(),
+            "(b.d==cat*)".to_string(),
+            "b".to_string(),
+            "c".to_string(),
+        ],
+        String::new(),
+        &mut visited,
+    );
+    assert_eq!(visited.len(), 3);
+    assert_eq!(convert_single_node(visited[0].yml), "thing1");
+    assert_eq!(convert_single_node(visited[1].yml), "thing2");
+    assert_eq!(convert_single_node(visited[2].yml), "thing3");
 }
