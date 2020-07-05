@@ -169,7 +169,7 @@ fn recurse<'a>(
             debug!("match on array indices: {:?}, traverse", array_indices);
             for array_idx in array_indices {
                 let mut new_path = path.clone();
-                new_path.push_str(&format!("[{}]", array_idx));
+                new_path.push_str(&format!(".[{}]", array_idx));
                 traverse(&v[array_idx], head, tail, new_path, visited);
             }
         }

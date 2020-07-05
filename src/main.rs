@@ -5,14 +5,11 @@ use yaml_rust::{Yaml, YamlLoader};
 
 static LOGGER: SimpleLogger = SimpleLogger;
 
-// TODO(wdeuschle): add unit tests to modules
+// TODO(wdeuschle): add unit tests to modules, testing audit
 // TODO(wdeuschle): rethink the structure
 // TODO(wdeuschle); audit remaining read functionality we're missing
 //                  - implementing aliasing and anchors
-//                  - path printing testing
-//                  - add filters
 //                  - deep splatting
-//                  - print the length of filtered results
 fn main() {
     let matches = App::new("ry")
         .version("0.0")
@@ -178,18 +175,40 @@ fn main() {
             visited.push(default_visited_node);
         }
         debug!("matched values: {:?}", visited);
+
+        let print_mode = parse_print_mode(matches.value_of("print_mode").unwrap_or("v"));
+        debug!("print_mode: {:?}", print_mode);
+
+        let collect = matches.is_present("collect");
+        debug!("collect: {}", collect);
+
         if matches.is_present("length") {
-            for value in visited {
-                println!("{}", ry::convert_length(value.yml));
+            // length mode
+            if collect {
+                // length and collect just prints the number of visited nodes
+                println!("{}", visited.len());
+            } else {
+                match print_mode {
+                    PrintMode::Path => {
+                        for value in visited {
+                            println!("{}", value.path);
+                        }
+                    }
+                    PrintMode::Value => {
+                        for value in visited {
+                            println!("{}", ry::convert_length(value.yml));
+                        }
+                    }
+                    PrintMode::ValueAndPath => {
+                        for value in visited {
+                            println!("{}: {}", value.path, ry::convert_length(value.yml));
+                        }
+                    }
+                }
             }
         } else {
-            let print_mode = parse_print_mode(matches.value_of("print_mode").unwrap_or("v"));
-            debug!("print_mode: {:?}", print_mode);
-            let collect_prepend = if matches.is_present("collect") {
-                "- "
-            } else {
-                ""
-            };
+            // no length mode
+            let collect_prepend = if collect { "- " } else { "" };
             match print_mode {
                 PrintMode::Path => {
                     for value in visited {
