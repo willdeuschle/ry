@@ -15,30 +15,42 @@ enum ArrayIndices {
 }
 
 // TODO(wdeuschle): unit test
-fn get_array_idx(path_elem: &str, array_node: &Vec<Yaml>) -> ArrayIndices {
-    debug!("getting array index for path_elem: {}", path_elem);
-    if path_elem == SPLAT {
-        debug!("found splat for array, using all indices");
+fn get_array_idx_for_child_filter(
+    path_elem: &str,
+    array_node: &Vec<Yaml>,
+    is_final_path_elem: bool,
+) -> ArrayIndices {
+    if path_elem == "*" {
         return ArrayIndices::Star;
     }
-    if path_elem.starts_with('(') && path_elem.ends_with(')') {
-        let path_elem = &path_elem[1..path_elem.len() - 1];
-        if path_elem == "*" {
-            return ArrayIndices::Star;
+    let filter_key_and_value = crate::path::parse_child_filter(path_elem).unwrap_or_else(|err| {
+        error!("unable to parse child filter, error: {:?}", err);
+        std::process::exit(1);
+    });
+    let (filter_path, filter_value) = (filter_key_and_value[0], filter_key_and_value[1]);
+
+    // parse filter_path
+    let parsed_path = crate::path::parse_path_into(filter_path);
+    debug!("parsed path for child filtering: {:?}", parsed_path);
+
+    let mut indices: Vec<usize> = vec![];
+
+    if is_final_path_elem {
+        // child value filter
+        debug!("running a child value filter");
+        for (idx, array_elem) in array_node.iter().enumerate() {
+            if key_matches_path(
+                &crate::convert::convert_single_node(array_elem),
+                filter_value,
+            ) {
+                debug!("array_elem matched child value filter: {:?}", array_elem);
+                indices.push(idx);
+            }
         }
-        let filter_key_and_value =
-            crate::path::parse_child_filter(path_elem).unwrap_or_else(|err| {
-                error!("unable to parse child filter, error: {:?}", err);
-                std::process::exit(1);
-            });
-        let (filter_path, filter_value) = (filter_key_and_value[0], filter_key_and_value[1]);
-
-        // parse filter_path
-        let parsed_path = crate::path::parse_path_into(filter_path);
-        debug!("parsed path for child filtering: {:?}", parsed_path);
-
+        debug!("child value filtering matched indices: {:?}", indices);
+    } else {
         // run a traverse search again against each node to determine if this is a valid child path
-        let mut indices: Vec<usize> = vec![];
+        debug!("running a child node filter");
         for (idx, array_elem) in array_node.iter().enumerate() {
             let mut visited = Vec::<VisitedNode>::new();
             traverse(
@@ -51,7 +63,7 @@ fn get_array_idx(path_elem: &str, array_node: &Vec<Yaml>) -> ArrayIndices {
             );
             if visited.len() != 1 {
                 debug!(
-                    "array_elem did not match child filter, continuing: {:?}",
+                    "array_elem did not match child node filter, continuing: {:?}",
                     array_elem
                 );
                 continue;
@@ -61,12 +73,29 @@ fn get_array_idx(path_elem: &str, array_node: &Vec<Yaml>) -> ArrayIndices {
                 &crate::convert::convert_single_node(visited_elem.yml),
                 filter_value, // path element for child filter
             ) {
-                debug!("array_elem matched child filter: {:?}", array_elem);
+                debug!("array_elem matched child node filter: {:?}", array_elem);
                 indices.push(idx);
             }
         }
-        debug!("child filtering matched indices: {:?}", indices);
-        return ArrayIndices::Indices(indices);
+        debug!("child node filtering matched indices: {:?}", indices);
+    }
+    return ArrayIndices::Indices(indices);
+}
+
+// TODO(wdeuschle): unit test
+fn get_array_idx(
+    path_elem: &str,
+    array_node: &Vec<Yaml>,
+    is_final_path_elem: bool,
+) -> ArrayIndices {
+    debug!("getting array index for path_elem: {}", path_elem);
+    if path_elem == SPLAT {
+        debug!("found splat for array, using all indices");
+        return ArrayIndices::Star;
+    }
+    if path_elem.starts_with('(') && path_elem.ends_with(')') {
+        let path_elem = &path_elem[1..path_elem.len() - 1];
+        return get_array_idx_for_child_filter(path_elem, array_node, is_final_path_elem);
     } else if !path_elem.starts_with('[') || !path_elem.ends_with(']') {
         debug!(
             "key `{:?}` is neither a valid array index nor child filter, continuing",
@@ -141,7 +170,7 @@ fn is_scalar(node: &Yaml) -> bool {
     }
 }
 
-// TODO(wdeuschle): unit test
+// TODO(wdeuschle): unit test, could also use a rename
 fn key_matches_path(k: &str, p: &str) -> bool {
     if k == p || p == SPLAT {
         return true;
@@ -153,6 +182,21 @@ fn key_matches_path(k: &str, p: &str) -> bool {
         }
     }
     false
+}
+
+// TODO(wdeuschle): unit test
+fn is_child_filter_value_match(v: &Yaml, p: &str, is_final_path_elem: bool) -> bool {
+    if !is_final_path_elem || !(p.starts_with('(') && p.ends_with(')')) {
+        return false;
+    }
+    let p = &p[1..p.len() - 1];
+    let filter_key_and_value = crate::path::parse_child_filter(p).unwrap_or_else(|err| {
+        error!("unable to parse child value filter, error: {:?}", err);
+        std::process::exit(1);
+    });
+    let v_str = &crate::convert::convert_single_node(v);
+    let filter_value = filter_key_and_value[1];
+    key_matches_path(v_str, filter_value)
 }
 
 // TODO(wdeuschle): unit test
@@ -188,6 +232,14 @@ fn recurse<'a>(
                             }
                             new_path.push_str(k_str);
                             traverse(v, head, tail, new_path, head == SPLAT, visited);
+                        } else if is_child_filter_value_match(v, head, tail.len() == 0) {
+                            debug!("match on child value filter: {}", head);
+                            let mut new_path = path.clone();
+                            if new_path.len() > 0 {
+                                new_path.push_str(".");
+                            }
+                            new_path.push_str(k_str);
+                            traverse(v, head, tail, new_path, false, visited);
                         } else {
                             debug!("did not match on key: {}, continue", k_str);
                         }
@@ -210,7 +262,7 @@ fn recurse<'a>(
                     traverse(&v[array_idx], head, tail, new_path, true, visited);
                 }
             }
-            let array_indices: Vec<usize> = match get_array_idx(head, v) {
+            let array_indices: Vec<usize> = match get_array_idx(head, v, tail.len() == 0) {
                 ArrayIndices::Star => (0..v.len()).collect(),
                 ArrayIndices::Indices(indices) => {
                     for i in indices.iter() {

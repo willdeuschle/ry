@@ -72,6 +72,8 @@ mod tests {
         assert_eq!(PathElem::Quote, char_is('"'));
         assert_eq!(PathElem::ArrayOpen, char_is('['));
         assert_eq!(PathElem::ArrayClose, char_is(']'));
+        assert_eq!(PathElem::ParenOpen, char_is('('));
+        assert_eq!(PathElem::ParenClose, char_is(')'));
         assert_eq!(PathElem::Char, char_is('a'));
     }
 

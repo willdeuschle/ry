@@ -8,7 +8,6 @@ static LOGGER: SimpleLogger = SimpleLogger;
 // TODO(wdeuschle): add unit tests to modules, testing audit
 // TODO(wdeuschle): rethink/clean the structure
 // TODO(wdeuschle); audit remaining read functionality we're missing
-//                  - matching children values
 // NOTE(wdeuschle) merge keys not yet supported in yaml_rust: https://github.com/chyh1990/yaml-rust/issues/68
 fn main() {
     let matches = App::new("ry")

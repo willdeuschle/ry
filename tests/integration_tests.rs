@@ -55,6 +55,14 @@ fn test_parse_path_with_one_open_paren_panics() {
 }
 
 #[test]
+fn test_parse_path_with_child_value_filtering() {
+    assert_eq!(
+        ry::parse_path("animals(.==cat)").unwrap(),
+        vec!["animals", "(.==cat)"]
+    );
+}
+
+#[test]
 fn test_traverse_leaf() {
     use yaml_rust::YamlLoader;
 
@@ -442,4 +450,58 @@ a:
     assert_eq!(convert_single_node(visited[6].yml), "thing4");
     assert_eq!(convert_single_node(visited[7].yml), "boop");
     assert_eq!(convert_single_node(visited[8].yml), "mooo");
+}
+
+#[test]
+fn test_handle_child_value_filter_array() {
+    use yaml_rust::YamlLoader;
+
+    let docs_str = "
+animals:
+  - cats
+  - dog
+  - cheetah";
+
+    let doc = &YamlLoader::load_from_str(&docs_str).unwrap()[0];
+
+    let mut visited = Vec::<ry::VisitedNode>::new();
+    ry::traverse(
+        &doc,
+        "",
+        &vec!["animals".to_string(), "(.==c*)".to_string()],
+        String::new(),
+        false,
+        &mut visited,
+    );
+    assert_eq!(visited.len(), 2);
+    assert_eq!(convert_single_node(visited[0].yml), "cats");
+    assert_eq!(convert_single_node(visited[1].yml), "cheetah");
+}
+
+#[test]
+fn test_handle_child_value_filter_map() {
+    use yaml_rust::YamlLoader;
+
+    let docs_str = "
+animals:
+  cats: yes
+  dogs: yessiree
+  lions: nope
+  cheetas:
+    but: yes";
+
+    let doc = &YamlLoader::load_from_str(&docs_str).unwrap()[0];
+
+    let mut visited = Vec::<ry::VisitedNode>::new();
+    ry::traverse(
+        &doc,
+        "",
+        &vec!["animals".to_string(), "(.==yes*)".to_string()],
+        String::new(),
+        false,
+        &mut visited,
+    );
+    assert_eq!(visited.len(), 2);
+    assert_eq!(convert_single_node(visited[0].yml), "yes");
+    assert_eq!(convert_single_node(visited[1].yml), "yessiree");
 }
