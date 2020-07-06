@@ -1,6 +1,8 @@
 use log::{debug, error};
 use yaml_rust::Yaml;
 
+const SPLAT: &'static str = "**";
+
 #[derive(Debug)]
 pub struct VisitedNode<'a> {
     pub yml: &'a Yaml,
@@ -15,6 +17,10 @@ enum ArrayIndices {
 // TODO(wdeuschle): unit test
 fn get_array_idx(path_elem: &str, array_node: &Vec<Yaml>) -> ArrayIndices {
     debug!("getting array index for path_elem: {}", path_elem);
+    if path_elem == SPLAT {
+        debug!("found splat for array, using all indices");
+        return ArrayIndices::Star;
+    }
     if path_elem.starts_with('(') && path_elem.ends_with(')') {
         let path_elem = &path_elem[1..path_elem.len() - 1];
         if path_elem == "*" {
@@ -35,7 +41,14 @@ fn get_array_idx(path_elem: &str, array_node: &Vec<Yaml>) -> ArrayIndices {
         let mut indices: Vec<usize> = vec![];
         for (idx, array_elem) in array_node.iter().enumerate() {
             let mut visited = Vec::<VisitedNode>::new();
-            crate::traverse::traverse(array_elem, "", &parsed_path, String::new(), &mut visited);
+            traverse(
+                array_elem,
+                "",
+                &parsed_path,
+                String::new(),
+                false,
+                &mut visited,
+            );
             if visited.len() != 1 {
                 debug!(
                     "array_elem did not match child filter, continuing: {:?}",
@@ -55,11 +68,11 @@ fn get_array_idx(path_elem: &str, array_node: &Vec<Yaml>) -> ArrayIndices {
         debug!("child filtering matched indices: {:?}", indices);
         return ArrayIndices::Indices(indices);
     } else if !path_elem.starts_with('[') || !path_elem.ends_with(']') {
-        error!(
-            "key `{:?}` is neither a valid array index nor child filter, exiting",
+        debug!(
+            "key `{:?}` is neither a valid array index nor child filter, continuing",
             path_elem
         );
-        std::process::exit(1);
+        return ArrayIndices::Indices(vec![]);
     }
     let path_elem = &path_elem[1..path_elem.len() - 1];
     if path_elem == "*" {
@@ -82,11 +95,33 @@ pub fn traverse<'a>(
     head: &str,
     tail: &[String],
     path: String,
+    following_splat: bool,
     visited: &mut Vec<VisitedNode<'a>>,
 ) {
+    // handle following a splat
+    if following_splat {
+        if head == SPLAT {
+            if tail.len() > 0 {
+                // first traversal after finding a splat
+                recurse(node, &tail[0], &tail[1..], path, true, visited)
+            } else {
+                // final path element was a splat
+                if is_scalar(node) {
+                    visit(node, head, tail, path, visited);
+                } else {
+                    recurse(node, head, tail, path, false, visited);
+                }
+            }
+        } else if !is_scalar(node) {
+            // recurse until you find a non-splat match
+            recurse(node, head, tail, path, true, visited);
+        }
+        return;
+    }
+
     // if parsed_path still has elements and the node is not a scalar, recurse
     if tail.len() > 0 && !is_scalar(node) {
-        recurse(node, &tail[0], &tail[1..], path, visited)
+        recurse(node, &tail[0], &tail[1..], path, false, visited)
     } else {
         // the parsed path is empty or we have a scalar, try visiting
         visit(node, head, tail, path, visited);
@@ -108,7 +143,7 @@ fn is_scalar(node: &Yaml) -> bool {
 
 // TODO(wdeuschle): unit test
 fn key_matches_path(k: &str, p: &str) -> bool {
-    if k == p {
+    if k == p || p == SPLAT {
         return true;
     }
     if p.ends_with('*') {
@@ -126,6 +161,7 @@ fn recurse<'a>(
     head: &str,
     tail: &[String],
     path: String,
+    following_splat: bool,
     visited: &mut Vec<VisitedNode<'a>>,
 ) {
     // for every entry in the node (we're assuming its a map), traverse if the head matches
@@ -134,6 +170,16 @@ fn recurse<'a>(
             for (k, v) in h {
                 match k {
                     Yaml::String(k_str) => {
+                        if following_splat {
+                            // traverse deeper, still following a splat
+                            debug!("following splat in map for key: {}, traverse", k_str);
+                            let mut new_path = path.clone();
+                            if new_path.len() > 0 {
+                                new_path.push_str(".");
+                            }
+                            new_path.push_str(k_str);
+                            traverse(v, head, tail, new_path, true, visited);
+                        }
                         if key_matches_path(k_str, head) {
                             debug!("match on key: {}, traverse", k_str);
                             let mut new_path = path.clone();
@@ -141,7 +187,7 @@ fn recurse<'a>(
                                 new_path.push_str(".");
                             }
                             new_path.push_str(k_str);
-                            traverse(v, head, tail, new_path, visited);
+                            traverse(v, head, tail, new_path, head == SPLAT, visited);
                         } else {
                             debug!("did not match on key: {}, continue", k_str);
                         }
@@ -154,6 +200,16 @@ fn recurse<'a>(
             }
         }
         Yaml::Array(v) => {
+            if following_splat {
+                // traverse deeper, still following a splat
+                debug!("following splat in array, traverse all {} indices", v.len());
+                let array_indices: Vec<usize> = (0..v.len()).collect();
+                for array_idx in array_indices {
+                    let mut new_path = path.clone();
+                    new_path.push_str(&format!(".[{}]", array_idx));
+                    traverse(&v[array_idx], head, tail, new_path, true, visited);
+                }
+            }
             let array_indices: Vec<usize> = match get_array_idx(head, v) {
                 ArrayIndices::Star => (0..v.len()).collect(),
                 ArrayIndices::Indices(indices) => {
@@ -170,7 +226,7 @@ fn recurse<'a>(
             for array_idx in array_indices {
                 let mut new_path = path.clone();
                 new_path.push_str(&format!(".[{}]", array_idx));
-                traverse(&v[array_idx], head, tail, new_path, visited);
+                traverse(&v[array_idx], head, tail, new_path, head == SPLAT, visited);
             }
         }
         Yaml::Alias(_a) => panic!("recursing on aliases not implemented yet"),

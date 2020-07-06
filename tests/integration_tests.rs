@@ -70,6 +70,7 @@ a:
         "",
         &vec!["a".to_string(), "b".to_string(), "c".to_string()],
         String::new(),
+        false,
         &mut visited,
     );
     assert_eq!(visited.len(), 1);
@@ -92,6 +93,7 @@ a:
         "",
         &vec!["a".to_string(), "b".to_string()],
         String::new(),
+        false,
         &mut visited,
     );
     assert_eq!(visited.len(), 1);
@@ -114,6 +116,7 @@ a:
         "",
         &vec!["a".to_string(), "foo.bar".to_string(), "c".to_string()],
         String::new(),
+        false,
         &mut visited,
     );
     assert_eq!(visited.len(), 1);
@@ -138,6 +141,7 @@ a:
         "",
         &vec!["a".to_string(), "b".to_string(), "[1]".to_string()],
         String::new(),
+        false,
         &mut visited,
     );
     assert_eq!(visited.len(), 1);
@@ -162,6 +166,7 @@ a:
         "",
         &vec!["a".to_string(), "b".to_string(), "[*]".to_string()],
         String::new(),
+        false,
         &mut visited,
     );
     assert_eq!(visited.len(), 3);
@@ -193,6 +198,7 @@ a:
             "c".to_string(),
         ],
         String::new(),
+        false,
         &mut visited,
     );
     assert_eq!(visited.len(), 1);
@@ -221,6 +227,7 @@ a:
         "",
         &vec!["a".to_string(), "item*".to_string(), "f".to_string()],
         String::new(),
+        false,
         &mut visited,
     );
     assert_eq!(visited.len(), 2);
@@ -250,6 +257,7 @@ a:
         "",
         &vec!["a".to_string(), "*".to_string(), "f".to_string()],
         String::new(),
+        false,
         &mut visited,
     );
     assert_eq!(visited.len(), 4);
@@ -294,6 +302,7 @@ a:
             "c".to_string(),
         ],
         String::new(),
+        false,
         &mut visited,
     );
     assert_eq!(visited.len(), 2);
@@ -336,10 +345,101 @@ a:
             "c".to_string(),
         ],
         String::new(),
+        false,
         &mut visited,
     );
     assert_eq!(visited.len(), 3);
     assert_eq!(convert_single_node(visited[0].yml), "thing1");
     assert_eq!(convert_single_node(visited[1].yml), "thing2");
     assert_eq!(convert_single_node(visited[2].yml), "thing3");
+}
+
+#[test]
+fn test_handle_splat() {
+    use yaml_rust::YamlLoader;
+
+    let docs_str = "
+a:
+  b1:
+    c: # MATCHES
+      c: thing1 # MATCHES
+    d: cat cat
+  b2:
+    c: thing2 # MATCHES
+    d: dog dog
+  b3:
+    d:
+    - f:
+        c: thing3 # MATCHES
+        d: beep
+    - f:
+        g:
+          c: thing4 # MATCHES
+          d: boop
+    - d: mooo";
+
+    let doc = &YamlLoader::load_from_str(&docs_str).unwrap()[0];
+
+    let mut visited = Vec::<ry::VisitedNode>::new();
+    ry::traverse(
+        &doc,
+        "",
+        &vec!["a".to_string(), "**".to_string(), "c".to_string()],
+        String::new(),
+        false,
+        &mut visited,
+    );
+    assert_eq!(visited.len(), 5);
+    assert_eq!(convert_single_node(visited[0].yml), "thing1");
+    assert_eq!(convert_single_node(visited[1].yml), "c: thing1");
+    assert_eq!(convert_single_node(visited[2].yml), "thing2");
+    assert_eq!(convert_single_node(visited[3].yml), "thing3");
+    assert_eq!(convert_single_node(visited[4].yml), "thing4");
+}
+
+#[test]
+fn test_handle_splat_ending() {
+    use yaml_rust::YamlLoader;
+
+    let docs_str = "
+a:
+  b1:
+    c:
+      c: thing1 # MATCHES
+    d: cat cat # MATCHES
+  b2:
+    c: thing2 # MATCHES
+    d: dog dog # MATCHES
+  b3:
+    d:
+    - f:
+        c: thing3 # MATCHES
+        d: beep # MATCHES
+    - f:
+        g:
+          c: thing4 # MATCHES # MATCHES
+          d: boop # MATCHES
+    - d: mooo # MATCHES";
+
+    let doc = &YamlLoader::load_from_str(&docs_str).unwrap()[0];
+
+    let mut visited = Vec::<ry::VisitedNode>::new();
+    ry::traverse(
+        &doc,
+        "",
+        &vec!["a".to_string(), "**".to_string()],
+        String::new(),
+        false,
+        &mut visited,
+    );
+    assert_eq!(visited.len(), 9);
+    assert_eq!(convert_single_node(visited[0].yml), "thing1");
+    assert_eq!(convert_single_node(visited[1].yml), "cat cat");
+    assert_eq!(convert_single_node(visited[2].yml), "thing2");
+    assert_eq!(convert_single_node(visited[3].yml), "dog dog");
+    assert_eq!(convert_single_node(visited[4].yml), "thing3");
+    assert_eq!(convert_single_node(visited[5].yml), "beep");
+    assert_eq!(convert_single_node(visited[6].yml), "thing4");
+    assert_eq!(convert_single_node(visited[7].yml), "boop");
+    assert_eq!(convert_single_node(visited[8].yml), "mooo");
 }

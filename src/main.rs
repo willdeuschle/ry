@@ -8,8 +8,8 @@ static LOGGER: SimpleLogger = SimpleLogger;
 // TODO(wdeuschle): add unit tests to modules, testing audit
 // TODO(wdeuschle): rethink/clean the structure
 // TODO(wdeuschle); audit remaining read functionality we're missing
-//                  - merge keys not yet supported in yaml_rust: https://github.com/chyh1990/yaml-rust/issues/68
-//                  - deep splatting
+//                  - matching children values
+// NOTE(wdeuschle) merge keys not yet supported in yaml_rust: https://github.com/chyh1990/yaml-rust/issues/68
 fn main() {
     let matches = App::new("ry")
         .version("0.0")
@@ -160,7 +160,7 @@ fn main() {
         debug!("parsed path: {:?}", parsed_path);
 
         let mut visited = Vec::<ry::VisitedNode>::new();
-        ry::traverse(doc, "", &parsed_path, String::new(), &mut visited);
+        ry::traverse(doc, "", &parsed_path, String::new(), false, &mut visited);
 
         let default_yml: Yaml;
         let default_visited_node: ry::VisitedNode;
