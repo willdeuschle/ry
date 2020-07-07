@@ -169,6 +169,7 @@ mod tests {
     }
 }
 
+// TODO: audit for integration tests
 pub fn parse_path_into(path: &str) -> Vec<String> {
     let parsed_path_res = parse_path(path);
     let parsed_path_vec: Vec<String> = match parsed_path_res {
@@ -181,6 +182,7 @@ pub fn parse_path_into(path: &str) -> Vec<String> {
     parsed_path_vec
 }
 
+// TODO: audit for integration tests
 pub fn parse_path(path: &str) -> Result<Vec<String>, ParseError> {
     // TODO: finish testing all cases, finish remaining edge cases and error handling
     // can handle errors by returning an option or error type
@@ -261,7 +263,7 @@ pub fn parse_path(path: &str) -> Result<Vec<String>, ParseError> {
     Ok(parsed_path)
 }
 
-// TODO(wdeuschle): test
+// TODO: audit for integration tests
 pub fn parse_child_filter(filter: &str) -> Result<[&str; 2], ParseError> {
     let split_filter: Vec<&str> = filter.split("==").collect();
     if split_filter.len() != 2 {

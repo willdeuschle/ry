@@ -119,6 +119,7 @@ fn get_array_idx(
     }
 }
 
+// TODO: audit for integration testing
 pub fn traverse<'a>(
     node: &'a Yaml,
     head: &str,
