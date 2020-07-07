@@ -8,8 +8,7 @@ pub fn debug_print_doc_structure(doc: &Yaml) -> EmitResult {
     Ok(())
 }
 
-// TODO(wdeuschle): integration test
-pub fn get_node_structure(node: &Yaml) -> Result<String, EmitError> {
+fn get_node_structure(node: &Yaml) -> Result<String, EmitError> {
     let mut out_str = String::new();
     let mut emitter = YamlEmitter::new(&mut out_str);
     emitter.dump(node)?;
@@ -21,7 +20,6 @@ pub fn get_node_structure(node: &Yaml) -> Result<String, EmitError> {
     Ok(out_str.trim_start_matches("---\n").to_string())
 }
 
-// TODO(wdeuschle): needs individual testing?
 pub fn convert_single_node(node: &Yaml) -> String {
     match node {
         Yaml::String(s) => format!("{}", s),
@@ -35,8 +33,6 @@ pub fn convert_single_node(node: &Yaml) -> String {
             });
             format!("{}", s)
         }
-        Yaml::Null => format!("null"),
-        Yaml::BadValue => format!("node `{:?}` is corrupted", node),
         v @ Yaml::Array(_) => {
             let s = get_node_structure(v).unwrap_or_else(|err| {
                 error!("failed to convert array value `{:?}` to string: {}", v, err);
@@ -44,13 +40,14 @@ pub fn convert_single_node(node: &Yaml) -> String {
             });
             format!("{}", s)
         }
-        _a @ Yaml::Alias(_) => {
-            panic!("alias type node yet implemented");
+        Yaml::Null => format!("null"),
+        Yaml::BadValue => format!("node `{:?}` is corrupted", node),
+        Yaml::Alias(_) => {
+            panic!("alias type not implemented");
         }
     }
 }
 
-// TODO(wdeuschle): needs testing
 pub fn convert_length(node: &Yaml) -> String {
     match node {
         Yaml::String(s) => format!("{}", s.len()),
@@ -68,54 +65,12 @@ pub fn convert_length(node: &Yaml) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use yaml_rust::YamlLoader;
 
     #[test]
-    fn test_convert_length_string() {
-        let s = Yaml::String("four".to_string());
-        assert_eq!(convert_length(&s), "4");
-    }
-
-    #[test]
-    fn test_convert_length_hash() {
-        let hash_str = "
-a:
-  item_b
-b:
-  item_c
-c:
-  item_d";
-        let hash = &YamlLoader::load_from_str(&hash_str).unwrap()[0];
-        assert_eq!(convert_length(&hash), "3");
-    }
-
-    #[test]
-    fn test_convert_length_array() {
-        let array_str = "
-- a
-- b
-- c";
-        let array = &YamlLoader::load_from_str(&array_str).unwrap()[0];
-        assert_eq!(convert_length(&array), "3");
-    }
-
-    #[test]
-    fn test_convert_length_integer() {
-        assert_eq!(convert_length(&Yaml::Integer(100)), "3");
-    }
-
-    #[test]
-    fn test_convert_length_real() {
-        assert_eq!(convert_length(&Yaml::Real(".001".to_string())), "4");
-    }
-
-    #[test]
-    fn test_convert_length_boolean() {
-        assert_eq!(convert_length(&Yaml::Boolean(true)), "4");
-    }
-
-    #[test]
-    fn test_convert_length_null() {
-        assert_eq!(convert_length(&Yaml::Null), "0");
+    fn test_get_node_structure() {
+        assert_eq!(
+            get_node_structure(&Yaml::String("node structure".to_string())).unwrap(),
+            "node structure"
+        );
     }
 }

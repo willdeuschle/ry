@@ -1,4 +1,61 @@
-use ry::convert::convert_single_node;
+use ry::convert::{convert_length, convert_single_node};
+use yaml_rust::{Yaml, YamlLoader};
+
+#[test]
+fn test_convert_single_node() {
+    assert_eq!(
+        convert_single_node(&Yaml::String("string".to_string())),
+        "string"
+    );
+    assert_eq!(convert_single_node(&Yaml::Integer(1)), "1");
+    assert_eq!(convert_single_node(&Yaml::Real(0.01.to_string())), "0.01");
+    assert_eq!(convert_single_node(&Yaml::Boolean(true)), "true");
+    let hash_str = "a: b";
+    let hash = &YamlLoader::load_from_str(hash_str).unwrap()[0];
+    match hash {
+        Yaml::Hash(_) => {}
+        _ => panic!("invalid, not hash type"),
+    };
+    assert_eq!(convert_single_node(hash), hash_str);
+    let array_str = "- a";
+    let array = &YamlLoader::load_from_str(array_str).unwrap()[0];
+    match array {
+        Yaml::Array(_) => {}
+        _ => panic!("invalid, not array type"),
+    };
+    assert_eq!(convert_single_node(array), array_str);
+    assert_eq!(convert_single_node(&Yaml::Null), "null");
+}
+
+#[test]
+fn test_convert_length() {
+    assert_eq!(convert_length(&Yaml::String("four".to_string())), "4");
+
+    let hash_str = "
+a:
+item_b
+b:
+item_c
+c:
+item_d";
+    let hash = &YamlLoader::load_from_str(&hash_str).unwrap()[0];
+    assert_eq!(convert_length(&hash), "3");
+
+    let array_str = "
+- a
+- b
+- c";
+    let array = &YamlLoader::load_from_str(&array_str).unwrap()[0];
+    assert_eq!(convert_length(&array), "3");
+
+    assert_eq!(convert_length(&Yaml::Integer(100)), "3");
+
+    assert_eq!(convert_length(&Yaml::Real(".001".to_string())), "4");
+
+    assert_eq!(convert_length(&Yaml::Boolean(true)), "4");
+
+    assert_eq!(convert_length(&Yaml::Null), "0");
+}
 
 #[test]
 fn test_parse_path() {
@@ -64,8 +121,6 @@ fn test_parse_path_with_child_value_filtering() {
 
 #[test]
 fn test_traverse_leaf() {
-    use yaml_rust::YamlLoader;
-
     let docs_str = "
 a:
   b:
@@ -87,8 +142,6 @@ a:
 
 #[test]
 fn test_traverse_non_leaf() {
-    use yaml_rust::YamlLoader;
-
     let docs_str = "
 a:
   b:
@@ -110,8 +163,6 @@ a:
 
 #[test]
 fn test_traverse_with_quoted_key() {
-    use yaml_rust::YamlLoader;
-
     let docs_str = "
 a:
   foo.bar:
@@ -133,8 +184,6 @@ a:
 
 #[test]
 fn test_traverse_array() {
-    use yaml_rust::YamlLoader;
-
     let docs_str = "
 a:
   b:
@@ -158,8 +207,6 @@ a:
 
 #[test]
 fn test_traverse_array_wildcard() {
-    use yaml_rust::YamlLoader;
-
     let docs_str = "
 a:
   b:
@@ -185,8 +232,6 @@ a:
 
 #[test]
 fn test_traverse_array_after_index() {
-    use yaml_rust::YamlLoader;
-
     let docs_str = "
 a:
   b:
@@ -215,8 +260,6 @@ a:
 
 #[test]
 fn test_traverse_hash_prefix_match() {
-    use yaml_rust::YamlLoader;
-
     let docs_str = "
 a:
   item_b:
@@ -245,8 +288,6 @@ a:
 
 #[test]
 fn test_traverse_hash_wildcard() {
-    use yaml_rust::YamlLoader;
-
     let docs_str = "
 a:
   item_b:
@@ -277,8 +318,6 @@ a:
 
 #[test]
 fn test_child_array_filtering() {
-    use yaml_rust::YamlLoader;
-
     let docs_str = "
 a:
   - b:
@@ -320,8 +359,6 @@ a:
 
 #[test]
 fn test_child_array_filtering_with_wildcard() {
-    use yaml_rust::YamlLoader;
-
     let docs_str = "
 a:
   - b:
@@ -364,8 +401,6 @@ a:
 
 #[test]
 fn test_handle_splat() {
-    use yaml_rust::YamlLoader;
-
     let docs_str = "
 a:
   b1:
@@ -407,8 +442,6 @@ a:
 
 #[test]
 fn test_handle_splat_ending() {
-    use yaml_rust::YamlLoader;
-
     let docs_str = "
 a:
   b1:
@@ -454,8 +487,6 @@ a:
 
 #[test]
 fn test_handle_child_value_filter_array() {
-    use yaml_rust::YamlLoader;
-
     let docs_str = "
 animals:
   - cats
@@ -480,8 +511,6 @@ animals:
 
 #[test]
 fn test_handle_child_value_filter_map() {
-    use yaml_rust::YamlLoader;
-
     let docs_str = "
 animals:
   cats: yes
