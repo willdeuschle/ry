@@ -39,7 +39,7 @@ fn get_array_idx_for_child_filter(
         // child value filter
         debug!("running a child value filter");
         for (idx, array_elem) in array_node.iter().enumerate() {
-            if key_matches_path(
+            if matches_pattern(
                 &crate::convert::convert_single_node(array_elem),
                 filter_value,
             ) {
@@ -69,7 +69,7 @@ fn get_array_idx_for_child_filter(
                 continue;
             }
             let ref visited_elem = visited[0];
-            if key_matches_path(
+            if matches_pattern(
                 &crate::convert::convert_single_node(visited_elem.yml),
                 filter_value, // path element for child filter
             ) {
@@ -158,7 +158,6 @@ pub fn traverse<'a>(
     }
 }
 
-// TODO(wdeuschle): unit test
 fn is_scalar(node: &Yaml) -> bool {
     match node {
         Yaml::String(_) => true,
@@ -171,21 +170,19 @@ fn is_scalar(node: &Yaml) -> bool {
     }
 }
 
-// TODO(wdeuschle): unit test, could also use a rename
-fn key_matches_path(k: &str, p: &str) -> bool {
-    if k == p || p == SPLAT {
+fn matches_pattern(v: &str, pattern: &str) -> bool {
+    if v == pattern || pattern == SPLAT {
         return true;
     }
-    if p.ends_with('*') {
-        let truncated_p = p.trim_end_matches('*');
-        if k.starts_with(truncated_p) {
+    if pattern.ends_with('*') {
+        let truncated_p = pattern.trim_end_matches('*');
+        if v.starts_with(truncated_p) {
             return true;
         }
     }
     false
 }
 
-// TODO(wdeuschle): unit test
 fn is_child_filter_value_match(v: &Yaml, p: &str, is_final_path_elem: bool) -> bool {
     if !is_final_path_elem || !(p.starts_with('(') && p.ends_with(')')) {
         return false;
@@ -197,7 +194,7 @@ fn is_child_filter_value_match(v: &Yaml, p: &str, is_final_path_elem: bool) -> b
     });
     let v_str = &crate::convert::convert_single_node(v);
     let filter_value = filter_key_and_value[1];
-    key_matches_path(v_str, filter_value)
+    matches_pattern(v_str, filter_value)
 }
 
 // TODO(wdeuschle): unit test
@@ -225,7 +222,7 @@ fn recurse<'a>(
                             new_path.push_str(k_str);
                             traverse(v, head, tail, new_path, true, visited);
                         }
-                        if key_matches_path(k_str, head) {
+                        if matches_pattern(k_str, head) {
                             debug!("match on key: {}, traverse", k_str);
                             let mut new_path = path.clone();
                             if new_path.len() > 0 {
@@ -356,4 +353,80 @@ fn visit<'a>(
         return;
     }
     debug!("tail length is not 0, not visiting node {:?}", node);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_matches_pattern_identical() {
+        assert!(matches_pattern("rusty", "rusty"));
+    }
+
+    #[test]
+    fn test_matches_pattern_splat() {
+        assert!(matches_pattern("rusty", "r*"));
+    }
+
+    #[test]
+    fn test_matches_pattern_wildcard() {
+        assert!(matches_pattern("rusty", "**"));
+    }
+
+    #[test]
+    fn test_matches_pattern_no() {
+        assert!(!matches_pattern("rusty", "smooth"));
+    }
+
+    #[test]
+    fn test_is_child_filter_value_match_not_final_elem() {
+        assert!(!is_child_filter_value_match(
+            &Yaml::String("crabby".to_string()),
+            "",
+            false
+        ));
+    }
+
+    #[test]
+    fn test_is_child_filter_value_match_not_a_filter() {
+        assert!(!is_child_filter_value_match(
+            &Yaml::String("crabby".to_string()),
+            "[.==crabby]",
+            true
+        ));
+        assert!(!is_child_filter_value_match(
+            &Yaml::String("crabby".to_string()),
+            "[.==crabby)",
+            true
+        ));
+        assert!(!is_child_filter_value_match(
+            &Yaml::String("crabby".to_string()),
+            "(.==crabby]",
+            true
+        ));
+    }
+
+    #[test]
+    fn test_is_child_filter_value_match_not_a_match() {
+        assert!(!is_child_filter_value_match(
+            &Yaml::String("crabby".to_string()),
+            "(.==nope)",
+            true
+        ));
+    }
+
+    #[test]
+    fn test_is_child_filter_value_match_is_a_match() {
+        assert!(is_child_filter_value_match(
+            &Yaml::String("crabby".to_string()),
+            "(.==crabby)",
+            true
+        ));
+        assert!(is_child_filter_value_match(
+            &Yaml::String("crabby".to_string()),
+            "(.==crab*)",
+            true
+        ));
+    }
 }
