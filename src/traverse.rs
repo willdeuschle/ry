@@ -9,12 +9,12 @@ pub struct VisitedNode<'a> {
     pub path: String,
 }
 
+#[derive(Debug, PartialEq)]
 enum ArrayIndices {
     Star,
     Indices(Vec<usize>),
 }
 
-// TODO(wdeuschle): unit test
 fn get_array_idx_for_child_filter(
     path_elem: &str,
     array_node: &Vec<Yaml>,
@@ -428,5 +428,54 @@ mod tests {
             "(.==crab*)",
             true
         ));
+    }
+
+    #[test]
+    fn test_get_array_idx_for_child_filter_star() {
+        assert_eq!(
+            get_array_idx_for_child_filter("*", &vec![Yaml::Null], false),
+            ArrayIndices::Star
+        );
+    }
+
+    #[test]
+    fn test_get_array_idx_for_child_filter_final() {
+        assert_eq!(
+            get_array_idx_for_child_filter(
+                ".==dog*",
+                &vec![
+                    Yaml::String("dog".to_string()),
+                    Yaml::String("cat".to_string()),
+                    Yaml::String("doggerino".to_string())
+                ],
+                true
+            ),
+            ArrayIndices::Indices(vec![0, 2])
+        );
+    }
+
+    #[test]
+    fn test_get_array_idx_for_child_filter_node() {
+        use yaml_rust::YamlLoader;
+        let docs_str = "
+- b:
+    a1: 1
+    d: dog
+- b:
+    a2: 2
+    d: cat
+- b:
+    a3: 3
+    d: doggerino";
+        let doc = &YamlLoader::load_from_str(&docs_str).unwrap()[0];
+
+        let array = match doc {
+            Yaml::Array(v) => v,
+            _ => panic!("invalid doc, not an array"),
+        };
+        assert_eq!(
+            get_array_idx_for_child_filter("b.d==dog*", array, false),
+            ArrayIndices::Indices(vec![0, 2])
+        );
     }
 }
