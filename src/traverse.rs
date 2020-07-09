@@ -15,6 +15,8 @@ enum ArrayIndices {
     Indices(Vec<usize>),
 }
 
+// we should have this return an error and handle it in get_array_idx
+// this will allow us to test those conditions as well
 fn get_array_idx_for_child_filter(
     path_elem: &str,
     array_node: &Vec<Yaml>,
@@ -82,28 +84,9 @@ fn get_array_idx_for_child_filter(
     return ArrayIndices::Indices(indices);
 }
 
-// TODO(wdeuschle): unit test
-fn get_array_idx(
-    path_elem: &str,
-    array_node: &Vec<Yaml>,
-    is_final_path_elem: bool,
-) -> ArrayIndices {
-    debug!("getting array index for path_elem: {}", path_elem);
-    if path_elem == SPLAT {
-        debug!("found splat for array, using all indices");
-        return ArrayIndices::Star;
-    }
-    if path_elem.starts_with('(') && path_elem.ends_with(')') {
-        let path_elem = &path_elem[1..path_elem.len() - 1];
-        return get_array_idx_for_child_filter(path_elem, array_node, is_final_path_elem);
-    } else if !path_elem.starts_with('[') || !path_elem.ends_with(']') {
-        debug!(
-            "key `{:?}` is neither a valid array index nor child filter, continuing",
-            path_elem
-        );
-        return ArrayIndices::Indices(vec![]);
-    }
-    let path_elem = &path_elem[1..path_elem.len() - 1];
+// we should have this return an error and handle it in get_array_idx
+// this will allow us to test those conditions as well
+fn get_array_idx_for_indexing_operation(path_elem: &str) -> ArrayIndices {
     if path_elem == "*" {
         return ArrayIndices::Star;
     }
@@ -116,6 +99,36 @@ fn get_array_idx(
             );
             std::process::exit(1);
         }
+    }
+}
+
+// TODO(wdeuschle): test the function calls here
+// TODO(wdeuschle): this function should just switch based on the path_elem,
+// and farm out to whatever sub function is necessary. then we just have to
+// test the subfunctions and test that this higher level function takes
+// the right path. is there an interface equivalent in rust?
+// is it possible to match here?
+fn get_array_idx(
+    path_elem: &str,
+    array_node: &Vec<Yaml>,
+    is_final_path_elem: bool,
+) -> ArrayIndices {
+    debug!("getting array index for path_elem: {}", path_elem);
+    if path_elem == SPLAT {
+        debug!("found splat for array, using all indices");
+        return ArrayIndices::Star;
+    } else if path_elem.starts_with('(') && path_elem.ends_with(')') {
+        let path_elem = &path_elem[1..path_elem.len() - 1];
+        return get_array_idx_for_child_filter(path_elem, array_node, is_final_path_elem);
+    } else if path_elem.starts_with('[') && path_elem.ends_with(']') {
+        let path_elem = &path_elem[1..path_elem.len() - 1];
+        return get_array_idx_for_indexing_operation(path_elem);
+    } else {
+        debug!(
+            "key `{:?}` is neither a valid array index nor child filter, continuing",
+            path_elem
+        );
+        return ArrayIndices::Indices(vec![]);
     }
 }
 
@@ -476,6 +489,38 @@ mod tests {
         assert_eq!(
             get_array_idx_for_child_filter("b.d==dog*", array, false),
             ArrayIndices::Indices(vec![0, 2])
+        );
+    }
+
+    #[test]
+    fn get_array_idx_for_indexing_operation_wildcard() {
+        assert_eq!(
+            ArrayIndices::Star,
+            get_array_idx_for_indexing_operation("*")
+        );
+    }
+
+    #[test]
+    fn get_array_idx_for_indexing_operation_number_path_elem() {
+        assert_eq!(
+            ArrayIndices::Indices(vec![4]),
+            get_array_idx_for_indexing_operation("4")
+        );
+    }
+
+    #[test]
+    fn get_array_idx_splat() {
+        assert_eq!(
+            ArrayIndices::Star,
+            get_array_idx("**", &vec![Yaml::Null], false)
+        );
+    }
+
+    #[test]
+    fn get_array_idx_invalid_path_elem() {
+        assert_eq!(
+            ArrayIndices::Indices(vec![]),
+            get_array_idx("crabby", &vec![Yaml::Null], false)
         );
     }
 }
