@@ -1,7 +1,8 @@
+use crate::path::{
+    matches_pattern, parse_array_child_filter, parse_array_indexing_operation, ArrayIndices, SPLAT,
+};
 use log::{debug, error};
 use yaml_rust::Yaml;
-
-const SPLAT: &'static str = "**";
 
 #[derive(Debug)]
 pub struct VisitedNode<'a> {
@@ -9,126 +10,47 @@ pub struct VisitedNode<'a> {
     pub path: String,
 }
 
-#[derive(Debug, PartialEq)]
-enum ArrayIndices {
-    Star,
-    Indices(Vec<usize>),
+fn unwrap(s: &str) -> &str {
+    if s.len() < 2 {
+        return "";
+    }
+    &s[1..s.len() - 1]
 }
 
-// we should have this return an error and handle it in get_array_idx
-// this will allow us to test those conditions as well
-fn get_array_idx_for_child_filter(
+// TODO(wdeuschle): test the splat and empty case
+// TODO(wdeuchle): test that the handle functions are called properly, handle their errors
+fn get_array_idx<F, G>(
     path_elem: &str,
     array_node: &Vec<Yaml>,
     is_final_path_elem: bool,
-) -> ArrayIndices {
-    if path_elem == "*" {
-        return ArrayIndices::Star;
-    }
-    let filter_key_and_value = crate::path::parse_child_filter(path_elem).unwrap_or_else(|err| {
-        error!("unable to parse child filter, error: {:?}", err);
-        std::process::exit(1);
-    });
-    let (filter_path, filter_value) = (filter_key_and_value[0], filter_key_and_value[1]);
-
-    // parse filter_path
-    let parsed_path = crate::path::parse_path_into(filter_path);
-    debug!("parsed path for child filtering: {:?}", parsed_path);
-
-    let mut indices: Vec<usize> = vec![];
-
-    if is_final_path_elem {
-        // child value filter
-        debug!("running a child value filter");
-        for (idx, array_elem) in array_node.iter().enumerate() {
-            if matches_pattern(
-                &crate::convert::convert_single_node(array_elem),
-                filter_value,
-            ) {
-                debug!("array_elem matched child value filter: {:?}", array_elem);
-                indices.push(idx);
-            }
-        }
-        debug!("child value filtering matched indices: {:?}", indices);
-    } else {
-        // run a traverse search again against each node to determine if this is a valid child path
-        debug!("running a child node filter");
-        for (idx, array_elem) in array_node.iter().enumerate() {
-            let mut visited = Vec::<VisitedNode>::new();
-            traverse(
-                array_elem,
-                "",
-                &parsed_path,
-                String::new(),
-                false,
-                &mut visited,
-            );
-            if visited.len() != 1 {
-                debug!(
-                    "array_elem did not match child node filter, continuing: {:?}",
-                    array_elem
-                );
-                continue;
-            }
-            let ref visited_elem = visited[0];
-            if matches_pattern(
-                &crate::convert::convert_single_node(visited_elem.yml),
-                filter_value, // path element for child filter
-            ) {
-                debug!("array_elem matched child node filter: {:?}", array_elem);
-                indices.push(idx);
-            }
-        }
-        debug!("child node filtering matched indices: {:?}", indices);
-    }
-    return ArrayIndices::Indices(indices);
-}
-
-// we should have this return an error and handle it in get_array_idx
-// this will allow us to test those conditions as well
-fn get_array_idx_for_indexing_operation(path_elem: &str) -> ArrayIndices {
-    if path_elem == "*" {
-        return ArrayIndices::Star;
-    }
-    match path_elem.parse::<usize>() {
-        Ok(i) => ArrayIndices::Indices(vec![i]),
-        Err(e) => {
-            error!(
-                "unable to parse array index `{:?}`, error: {:?}",
-                path_elem, e
-            );
-            std::process::exit(1);
-        }
-    }
-}
-
-// TODO(wdeuschle): test the function calls here
-// TODO(wdeuschle): this function should just switch based on the path_elem,
-// and farm out to whatever sub function is necessary. then we just have to
-// test the subfunctions and test that this higher level function takes
-// the right path. is there an interface equivalent in rust?
-// is it possible to match here?
-fn get_array_idx(
-    path_elem: &str,
-    array_node: &Vec<Yaml>,
-    is_final_path_elem: bool,
-) -> ArrayIndices {
+    handle_child_filter: F,
+    handle_indexing_operation: G,
+) -> ArrayIndices
+where
+    F: FnOnce(&str, &Vec<Yaml>, bool) -> ArrayIndices,
+    G: FnOnce(&str) -> ArrayIndices,
+{
     debug!("getting array index for path_elem: {}", path_elem);
-    if path_elem == SPLAT {
-        debug!("found splat for array, using all indices");
-        return ArrayIndices::Star;
-    } else if path_elem.starts_with('(') && path_elem.ends_with(')') {
-        let path_elem = &path_elem[1..path_elem.len() - 1];
-        return get_array_idx_for_child_filter(path_elem, array_node, is_final_path_elem);
-    } else if path_elem.starts_with('[') && path_elem.ends_with(']') {
-        let path_elem = &path_elem[1..path_elem.len() - 1];
-        return get_array_idx_for_indexing_operation(path_elem);
-    } else {
-        debug!(
-            "key `{:?}` is neither a valid array index nor child filter, continuing",
-            path_elem
-        );
-        return ArrayIndices::Indices(vec![]);
+    match path_elem {
+        SPLAT => {
+            debug!("found splat for array, using all indices");
+            ArrayIndices::Star
+        }
+        _ if path_elem.starts_with('(') && path_elem.ends_with(')') => {
+            let path_elem = unwrap(path_elem);
+            handle_child_filter(path_elem, array_node, is_final_path_elem)
+        }
+        _ if path_elem.starts_with('[') && path_elem.ends_with(']') => {
+            let path_elem = unwrap(path_elem);
+            handle_indexing_operation(path_elem)
+        }
+        _ => {
+            debug!(
+                "key `{:?}` is neither a valid array index nor child filter, continuing",
+                path_elem
+            );
+            ArrayIndices::Indices(vec![])
+        }
     }
 }
 
@@ -183,25 +105,13 @@ fn is_scalar(node: &Yaml) -> bool {
     }
 }
 
-fn matches_pattern(v: &str, pattern: &str) -> bool {
-    if v == pattern || pattern == SPLAT {
-        return true;
-    }
-    if pattern.ends_with('*') {
-        let truncated_p = pattern.trim_end_matches('*');
-        if v.starts_with(truncated_p) {
-            return true;
-        }
-    }
-    false
-}
-
+// TODO: does this belong here? maybe a filter package?
 fn is_child_filter_value_match(v: &Yaml, p: &str, is_final_path_elem: bool) -> bool {
     if !is_final_path_elem || !(p.starts_with('(') && p.ends_with(')')) {
         return false;
     }
     let p = &p[1..p.len() - 1];
-    let filter_key_and_value = crate::path::parse_child_filter(p).unwrap_or_else(|err| {
+    let filter_key_and_value = crate::path::split_child_filter(p).unwrap_or_else(|err| {
         error!("unable to parse child value filter, error: {:?}", err);
         std::process::exit(1);
     });
@@ -273,7 +183,13 @@ fn recurse<'a>(
                     traverse(&v[array_idx], head, tail, new_path, true, visited);
                 }
             }
-            let array_indices: Vec<usize> = match get_array_idx(head, v, tail.len() == 0) {
+            let array_indices: Vec<usize> = match get_array_idx(
+                head,
+                v,
+                tail.len() == 0,
+                parse_array_child_filter,
+                parse_array_indexing_operation,
+            ) {
                 ArrayIndices::Star => (0..v.len()).collect(),
                 ArrayIndices::Indices(indices) => {
                     for i in indices.iter() {
@@ -373,26 +289,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_matches_pattern_identical() {
-        assert!(matches_pattern("rusty", "rusty"));
-    }
-
-    #[test]
-    fn test_matches_pattern_splat() {
-        assert!(matches_pattern("rusty", "r*"));
-    }
-
-    #[test]
-    fn test_matches_pattern_wildcard() {
-        assert!(matches_pattern("rusty", "**"));
-    }
-
-    #[test]
-    fn test_matches_pattern_no() {
-        assert!(!matches_pattern("rusty", "smooth"));
-    }
-
-    #[test]
     fn test_is_child_filter_value_match_not_final_elem() {
         assert!(!is_child_filter_value_match(
             &Yaml::String("crabby".to_string()),
@@ -444,75 +340,16 @@ mod tests {
     }
 
     #[test]
-    fn test_get_array_idx_for_child_filter_star() {
-        assert_eq!(
-            get_array_idx_for_child_filter("*", &vec![Yaml::Null], false),
-            ArrayIndices::Star
-        );
-    }
-
-    #[test]
-    fn test_get_array_idx_for_child_filter_final() {
-        assert_eq!(
-            get_array_idx_for_child_filter(
-                ".==dog*",
-                &vec![
-                    Yaml::String("dog".to_string()),
-                    Yaml::String("cat".to_string()),
-                    Yaml::String("doggerino".to_string())
-                ],
-                true
-            ),
-            ArrayIndices::Indices(vec![0, 2])
-        );
-    }
-
-    #[test]
-    fn test_get_array_idx_for_child_filter_node() {
-        use yaml_rust::YamlLoader;
-        let docs_str = "
-- b:
-    a1: 1
-    d: dog
-- b:
-    a2: 2
-    d: cat
-- b:
-    a3: 3
-    d: doggerino";
-        let doc = &YamlLoader::load_from_str(&docs_str).unwrap()[0];
-
-        let array = match doc {
-            Yaml::Array(v) => v,
-            _ => panic!("invalid doc, not an array"),
-        };
-        assert_eq!(
-            get_array_idx_for_child_filter("b.d==dog*", array, false),
-            ArrayIndices::Indices(vec![0, 2])
-        );
-    }
-
-    #[test]
-    fn get_array_idx_for_indexing_operation_wildcard() {
-        assert_eq!(
-            ArrayIndices::Star,
-            get_array_idx_for_indexing_operation("*")
-        );
-    }
-
-    #[test]
-    fn get_array_idx_for_indexing_operation_number_path_elem() {
-        assert_eq!(
-            ArrayIndices::Indices(vec![4]),
-            get_array_idx_for_indexing_operation("4")
-        );
-    }
-
-    #[test]
     fn get_array_idx_splat() {
         assert_eq!(
             ArrayIndices::Star,
-            get_array_idx("**", &vec![Yaml::Null], false)
+            get_array_idx(
+                "**",
+                &vec![Yaml::Null],
+                false,
+                parse_array_child_filter,
+                parse_array_indexing_operation
+            )
         );
     }
 
@@ -520,7 +357,25 @@ mod tests {
     fn get_array_idx_invalid_path_elem() {
         assert_eq!(
             ArrayIndices::Indices(vec![]),
-            get_array_idx("crabby", &vec![Yaml::Null], false)
+            get_array_idx(
+                "crabby",
+                &vec![Yaml::Null],
+                false,
+                parse_array_child_filter,
+                parse_array_indexing_operation
+            )
         );
+    }
+
+    #[test]
+    fn test_unwrap() {
+        let s1 = "";
+        assert_eq!("", unwrap(s1));
+
+        let s2 = "(crabby)";
+        assert_eq!("crabby", unwrap(s2));
+
+        let s3 = "[crabby]";
+        assert_eq!("crabby", unwrap(s3));
     }
 }
