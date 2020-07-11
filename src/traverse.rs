@@ -144,8 +144,8 @@ fn recurse<'a>(
                             }
                             new_path.push_str(k_str);
                             traverse(v, head, tail, new_path, head == SPLAT, visited);
+                        // tail.len() == 0 indicates this is a final path elem
                         } else if is_child_filter(head) && tail.len() == 0 {
-                            // tail.len() == 0 indicates this is a final path elem
                             let matches = is_child_filter_value_match(v, unwrap(head))
                                 .unwrap_or_else(|err| {
                                     error!("{}", err);
@@ -210,7 +210,6 @@ fn recurse<'a>(
             }
         }
         Yaml::Alias(_a) => panic!("recursing on aliases not implemented yet"),
-        // this can remain a panic as it's not yet implemented
         _ => {
             error!("can only recurse on maps, array, or aliases. recursing on `{:?}` is not supported, continuing", node);
         }
