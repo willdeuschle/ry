@@ -111,7 +111,6 @@ fn is_scalar(node: &Yaml) -> bool {
     }
 }
 
-// TODO(wdeuschle): unit test
 fn recurse<'a>(
     node: &'a Yaml,
     head: &str,
@@ -120,13 +119,11 @@ fn recurse<'a>(
     following_splat: bool,
     visited: &mut Vec<VisitedNode<'a>>,
 ) {
-    // for every entry in the node (we're assuming its a map), traverse if the head matches
     match node {
         Yaml::Hash(h) => recurse_hash(h, head, tail, path, following_splat, visited),
         Yaml::Array(v) => recurse_array(v, head, tail, path, following_splat, visited),
-        Yaml::Alias(_a) => panic!("recursing on aliases not implemented yet"),
         _ => {
-            error!("can only recurse on maps, array, or aliases. recursing on `{:?}` is not supported, continuing", node);
+            error!("can only recurse on maps or arrays. recursing on `{:?}` is not supported, continuing", node);
         }
     }
 }
