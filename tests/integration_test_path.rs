@@ -1,4 +1,4 @@
-use ry::{parse_path, ParseError};
+use ry::parse_path;
 
 #[test]
 fn test_parse_path() {
@@ -14,10 +14,13 @@ fn test_parse_path_with_quotes() {
 }
 
 #[test]
-fn test_parse_path_with_one_quote_fails() {
+fn test_parse_path_with_one_quote_errs() {
     let result = parse_path("a.\"foo.bar.c");
-    let expected = Err(ParseError::new("invalid path, no closing quote"));
-    assert_eq!(result, expected);
+    assert_eq!(true, result.is_err());
+    assert_eq!(
+        true,
+        format!("{}", result.unwrap_err()).ends_with("no closing quote")
+    );
 }
 
 #[test]
@@ -37,17 +40,43 @@ fn test_parse_path_with_parens() {
 }
 
 #[test]
-fn test_parse_path_with_one_open_array_panics() {
-    let result = parse_path("a.(b.d==cat*.c");
-    let expected = Err(ParseError::new("invalid path, no closing paren character"));
-    assert_eq!(result, expected);
+fn test_parse_path_with_one_open_array_errs() {
+    let result = parse_path("a.foo[1.bar");
+    assert_eq!(true, result.is_err());
+    assert_eq!(
+        true,
+        format!("{}", result.unwrap_err()).ends_with("no closing array character")
+    );
 }
 
 #[test]
-fn test_parse_path_with_one_open_paren_panics() {
-    let result = parse_path("a.foo[1.bar");
-    let expected = Err(ParseError::new("invalid path, no closing array character"));
-    assert_eq!(result, expected);
+fn test_parse_path_with_one_open_paren_errs() {
+    let result = parse_path("a.(b.d==cat*.c");
+    assert_eq!(true, result.is_err());
+    assert_eq!(
+        true,
+        format!("{}", result.unwrap_err()).ends_with("no closing paren character")
+    );
+}
+
+#[test]
+fn test_parse_path_with_open_array_start_errs() {
+    let result = parse_path("a.foo]1].bar");
+    assert_eq!(true, result.is_err());
+    assert_eq!(
+        true,
+        format!("{}", result.unwrap_err()).ends_with("closing array character before opening")
+    );
+}
+
+#[test]
+fn test_parse_path_with_close_paren_start_errs() {
+    let result = parse_path("a.)b.d==cat*.c)");
+    assert_eq!(true, result.is_err());
+    assert_eq!(
+        true,
+        format!("{}", result.unwrap_err()).ends_with("closing paren character before opening")
+    );
 }
 
 #[test]

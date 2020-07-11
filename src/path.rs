@@ -1,5 +1,5 @@
 use crate::traverse::{traverse, VisitedNode};
-use log::{debug, error};
+use log::debug;
 use std::fmt;
 use yaml_rust::Yaml;
 
@@ -72,23 +72,7 @@ fn next_specific_special_char(s: &str, pe: PathElem) -> (bool, usize) {
     }
 }
 
-// TODO: audit for integration tests
-pub fn parse_path_into(path: &str) -> Vec<String> {
-    let parsed_path_res = parse_path(path);
-    let parsed_path_vec: Vec<String> = match parsed_path_res {
-        Ok(_) => parsed_path_res.unwrap(),
-        Err(e) => {
-            error!("failed to parse path, error: {}", e);
-            std::process::exit(1);
-        }
-    };
-    parsed_path_vec
-}
-
-// TODO: audit for integration tests
 pub fn parse_path(path: &str) -> Result<Vec<String>, ParseError> {
-    // TODO: finish testing all cases, finish remaining edge cases and error handling
-    // can handle errors by returning an option or error type
     let mut parsed_path: Vec<String> = vec![];
     let mut current_idx = 0;
     while current_idx < path.len() {
@@ -111,7 +95,10 @@ pub fn parse_path(path: &str) -> Result<Vec<String>, ParseError> {
                     parsed_path.push(path[start_quoted_word_idx..end_quote_idx].to_string());
                     current_idx = end_quote_idx + 1;
                 } else {
-                    return Err(ParseError::new("invalid path, no closing quote"));
+                    return Err(ParseError::new(&format!(
+                        "invalid path `{}`, no closing quote",
+                        path
+                    )));
                 }
             }
             (PathElem::ArrayOpen, relative_array_open_idx) => {
@@ -126,7 +113,10 @@ pub fn parse_path(path: &str) -> Result<Vec<String>, ParseError> {
                     parsed_path.push(path[array_open_idx..array_close_idx + 1].to_string());
                     current_idx = array_close_idx + 1;
                 } else {
-                    return Err(ParseError::new("invalid path, no closing array character"));
+                    return Err(ParseError::new(&format!(
+                        "invalid path `{}`, no closing array character",
+                        path
+                    )));
                 }
             }
             (PathElem::ParenOpen, relative_paren_open_idx) => {
@@ -141,25 +131,30 @@ pub fn parse_path(path: &str) -> Result<Vec<String>, ParseError> {
                     parsed_path.push(path[paren_open_idx..paren_close_idx + 1].to_string());
                     current_idx = paren_close_idx + 1;
                 } else {
-                    return Err(ParseError::new("invalid path, no closing paren character"));
+                    return Err(ParseError::new(&format!(
+                        "invalid path `{}`, no closing paren character",
+                        path
+                    )));
                 }
             }
             (PathElem::ArrayClose, _) => {
-                return Err(ParseError::new(
-                    "invalid path, closing array character before opening",
-                ));
+                return Err(ParseError::new(&format!(
+                    "invalid path `{}`, closing array character before opening",
+                    path
+                )));
             }
             (PathElem::ParenClose, _) => {
-                return Err(ParseError::new(
-                    "invalid path, closing paren character before opening",
-                ));
-            }
-            (PathElem::Char, c) => {
-                return Err(ParseError::new(&format!("invalid path, found char {}", c)));
+                return Err(ParseError::new(&format!(
+                    "invalid path `{}`, closing paren character before opening",
+                    path
+                )));
             }
             (PathElem::EOW, _) => {
                 parsed_path.push(path[current_idx..].to_string());
                 break;
+            }
+            _ => {
+                return Err(ParseError::new(&format!("invalid path `{}`", path)));
             }
         }
     }
@@ -191,7 +186,7 @@ pub fn parse_array_child_filter(
     let (filter_path, filter_value) = (filter_key_and_value[0], filter_key_and_value[1]);
 
     // parse filter_path
-    let parsed_path = crate::path::parse_path_into(filter_path);
+    let parsed_path = parse_path(filter_path)?;
     debug!("parsed path for child filtering: {:?}", parsed_path);
 
     let mut indices: Vec<usize> = vec![];

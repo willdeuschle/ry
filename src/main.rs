@@ -156,7 +156,13 @@ fn main() {
         }
 
         // parse path
-        let parsed_path = ry::parse_path_into(path);
+        let parsed_path = match ry::parse_path(path) {
+            Ok(parsed_path) => parsed_path,
+            Err(e) => {
+                error!("failed to parse path, error: {}", e);
+                std::process::exit(1);
+            }
+        };
         debug!("parsed path: {:?}", parsed_path);
 
         let mut visited = Vec::<ry::VisitedNode>::new();
