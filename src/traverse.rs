@@ -3,6 +3,7 @@ use crate::path::{
     parse_array_indexing_operation, ArrayIndices, ParseError, SPLAT,
 };
 use log::{debug, error};
+use yaml_rust::yaml::{Array, Hash};
 use yaml_rust::Yaml;
 
 #[derive(Debug)]
@@ -121,97 +122,127 @@ fn recurse<'a>(
 ) {
     // for every entry in the node (we're assuming its a map), traverse if the head matches
     match node {
-        Yaml::Hash(h) => {
-            for (k, v) in h {
-                match k {
-                    Yaml::String(k_str) => {
-                        if following_splat {
-                            // traverse deeper, still following a splat
-                            debug!("following splat in map for key: {}, traverse", k_str);
-                            let mut new_path = path.clone();
-                            if new_path.len() > 0 {
-                                new_path.push_str(".");
-                            }
-                            new_path.push_str(k_str);
-                            traverse(v, head, tail, new_path, true, visited);
-                        }
-                        if matches_pattern(k_str, head) {
-                            debug!("match on key: {}, traverse", k_str);
-                            let mut new_path = path.clone();
-                            if new_path.len() > 0 {
-                                new_path.push_str(".");
-                            }
-                            new_path.push_str(k_str);
-                            traverse(v, head, tail, new_path, head == SPLAT, visited);
-                        // tail.len() == 0 indicates this is a final path elem
-                        } else if is_child_filter(head) && tail.len() == 0 {
-                            let matches = is_child_filter_value_match(v, unwrap(head))
-                                .unwrap_or_else(|err| {
-                                    error!("{}", err);
-                                    std::process::exit(1);
-                                });
-                            if !matches {
-                                debug!("did not match on key: `{}`, continue", k_str);
-                                continue;
-                            }
-                            debug!("match on child value filter: {}", head);
-                            let mut new_path = path.clone();
-                            if new_path.len() > 0 {
-                                new_path.push_str(".");
-                            }
-                            new_path.push_str(k_str);
-                            traverse(v, head, tail, new_path, false, visited);
-                        } else {
-                            debug!("did not match on key: `{}`, continue", k_str);
-                        }
-                    }
-                    _ => {
-                        error!("key `{:?}` is not a string, exiting", k);
-                        std::process::exit(1);
-                    }
-                }
-            }
-        }
-        Yaml::Array(v) => {
-            if following_splat {
-                // traverse deeper, still following a splat
-                debug!("following splat in array, traverse all {} indices", v.len());
-                let array_indices: Vec<usize> = (0..v.len()).collect();
-                for array_idx in array_indices {
-                    let mut new_path = path.clone();
-                    new_path.push_str(&format!(".[{}]", array_idx));
-                    traverse(&v[array_idx], head, tail, new_path, true, visited);
-                }
-            }
-            let array_indices: Vec<usize> = match get_array_idx(
-                head,
-                v,
-                tail.len() == 0,
-                parse_array_child_filter,
-                parse_array_indexing_operation,
-            ) {
-                ArrayIndices::Star => (0..v.len()).collect(),
-                ArrayIndices::Indices(indices) => {
-                    for i in indices.iter() {
-                        if *i >= v.len() {
-                            debug!("array index {} too large, don't recurse", i);
-                            return;
-                        }
-                    }
-                    indices
-                }
-            };
-            debug!("match on array indices: {:?}, traverse", array_indices);
-            for array_idx in array_indices {
-                let mut new_path = path.clone();
-                new_path.push_str(&format!(".[{}]", array_idx));
-                traverse(&v[array_idx], head, tail, new_path, head == SPLAT, visited);
-            }
-        }
+        Yaml::Hash(h) => recurse_hash(h, head, tail, path, following_splat, visited),
+        Yaml::Array(v) => recurse_array(v, head, tail, path, following_splat, visited),
         Yaml::Alias(_a) => panic!("recursing on aliases not implemented yet"),
         _ => {
             error!("can only recurse on maps, array, or aliases. recursing on `{:?}` is not supported, continuing", node);
         }
+    }
+}
+
+// TODO(wdeuschle): unit test
+fn recurse_hash<'a>(
+    hash: &'a Hash,
+    head: &str,
+    tail: &[String],
+    path: String,
+    following_splat: bool,
+    visited: &mut Vec<VisitedNode<'a>>,
+) {
+    for (k, v) in hash {
+        match k {
+            Yaml::String(k_str) => {
+                if following_splat {
+                    // traverse deeper, still following a splat
+                    debug!("following splat in map for key: {}, traverse", k_str);
+                    let mut new_path = path.clone();
+                    if new_path.len() > 0 {
+                        new_path.push_str(".");
+                    }
+                    new_path.push_str(k_str);
+                    traverse(v, head, tail, new_path, true, visited);
+                }
+                if matches_pattern(k_str, head) {
+                    debug!("match on key: {}, traverse", k_str);
+                    let mut new_path = path.clone();
+                    if new_path.len() > 0 {
+                        new_path.push_str(".");
+                    }
+                    new_path.push_str(k_str);
+                    traverse(v, head, tail, new_path, head == SPLAT, visited);
+                // tail.len() == 0 indicates this is a final path elem
+                } else if is_child_filter(head) && tail.len() == 0 {
+                    let matches =
+                        is_child_filter_value_match(v, unwrap(head)).unwrap_or_else(|err| {
+                            error!("{}", err);
+                            std::process::exit(1);
+                        });
+                    if !matches {
+                        debug!("did not match on key: `{}`, continue", k_str);
+                        continue;
+                    }
+                    debug!("match on child value filter: {}", head);
+                    let mut new_path = path.clone();
+                    if new_path.len() > 0 {
+                        new_path.push_str(".");
+                    }
+                    new_path.push_str(k_str);
+                    traverse(v, head, tail, new_path, false, visited);
+                } else {
+                    debug!("did not match on key: `{}`, continue", k_str);
+                }
+            }
+            _ => {
+                error!("key `{:?}` is not a string, exiting", k);
+                std::process::exit(1);
+            }
+        }
+    }
+}
+
+// TODO(wdeuschle): unit test
+fn recurse_array<'a>(
+    array: &'a Array,
+    head: &str,
+    tail: &[String],
+    path: String,
+    following_splat: bool,
+    visited: &mut Vec<VisitedNode<'a>>,
+) {
+    if following_splat {
+        // traverse deeper, still following a splat
+        debug!(
+            "following splat in array, traverse all {} indices",
+            array.len()
+        );
+        let array_indices: Vec<usize> = (0..array.len()).collect();
+        for array_idx in array_indices {
+            let mut new_path = path.clone();
+            new_path.push_str(&format!(".[{}]", array_idx));
+            traverse(&array[array_idx], head, tail, new_path, true, visited);
+        }
+    }
+    let array_indices: Vec<usize> = match get_array_idx(
+        head,
+        array,
+        tail.len() == 0,
+        parse_array_child_filter,
+        parse_array_indexing_operation,
+    ) {
+        ArrayIndices::Star => (0..array.len()).collect(),
+        ArrayIndices::Indices(indices) => {
+            for i in indices.iter() {
+                if *i >= array.len() {
+                    debug!("array index {} too large, don't recurse", i);
+                    return;
+                }
+            }
+            indices
+        }
+    };
+    debug!("match on array indices: {:?}, traverse", array_indices);
+    for array_idx in array_indices {
+        let mut new_path = path.clone();
+        new_path.push_str(&format!(".[{}]", array_idx));
+        traverse(
+            &array[array_idx],
+            head,
+            tail,
+            new_path,
+            head == SPLAT,
+            visited,
+        );
     }
 }
 
