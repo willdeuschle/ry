@@ -4,6 +4,7 @@ use std::fmt;
 use yaml_rust::Yaml;
 
 pub const SPLAT: &'static str = "**";
+pub const CHILD_FILTER_DELIM: &'static str = "==";
 
 #[derive(Debug, PartialEq)]
 pub enum ArrayIndices {
@@ -162,7 +163,13 @@ pub fn parse_path(path: &str) -> Result<Vec<String>, ParseError> {
 }
 
 pub fn split_child_filter(filter: &str) -> Result<[&str; 2], ParseError> {
-    let split_filter: Vec<&str> = filter.split("==").collect();
+    if !filter.contains(CHILD_FILTER_DELIM) {
+        return Err(ParseError::new(&format!(
+            "invalid child filter: `{}`",
+            filter
+        )));
+    }
+    let split_filter: Vec<&str> = filter.split(CHILD_FILTER_DELIM).collect();
     if split_filter.len() != 2 {
         return Err(ParseError::new(&format!(
             "invalid child filter: `{}`",
@@ -262,6 +269,17 @@ pub fn matches_pattern(v: &str, pattern: &str) -> bool {
         }
     }
     false
+}
+
+pub fn is_child_filter(p: &str) -> bool {
+    p.starts_with('(') && p.ends_with(')')
+}
+
+pub fn is_child_filter_value_match(v: &Yaml, pattern: &str) -> Result<bool, ParseError> {
+    let filter_key_and_value = split_child_filter(pattern)?;
+    let v_str = &crate::convert::convert_single_node(v);
+    let filter_value = filter_key_and_value[1];
+    Ok(matches_pattern(v_str, filter_value))
 }
 
 #[cfg(test)]
@@ -391,6 +409,46 @@ mod tests {
     }
 
     #[test]
+    fn test_is_child_filter_no() {
+        assert!(!is_child_filter("[.==crabby]"));
+        assert!(!is_child_filter("(.==crabby]"));
+        assert!(!is_child_filter("[.==crabby)"));
+        assert!(!is_child_filter(""));
+    }
+
+    #[test]
+    fn test_is_child_filter_yes() {
+        assert!(is_child_filter("(.==crabby)"));
+        assert!(is_child_filter("(crabby)"));
+        assert!(is_child_filter("()"));
+    }
+
+    #[test]
+    fn test_is_child_filter_value_match_not_filter_errs() {
+        assert_eq!(
+            true,
+            is_child_filter_value_match(&Yaml::String("crabby".to_string()), "crabby").is_err()
+        );
+    }
+
+    #[test]
+    fn test_is_child_filter_value_match_not_a_match() {
+        assert!(
+            !is_child_filter_value_match(&Yaml::String("crabby".to_string()), "(.==nope)").unwrap()
+        );
+    }
+
+    #[test]
+    fn test_is_child_filter_value_match_is_a_match() {
+        assert!(
+            is_child_filter_value_match(&Yaml::String("crabby".to_string()), ".==crabby").unwrap()
+        );
+        assert!(
+            is_child_filter_value_match(&Yaml::String("crabby".to_string()), ".==crab*").unwrap()
+        );
+    }
+
+    #[test]
     fn test_split_child_filter_valid() {
         let split_filter = split_child_filter(".==crabby").unwrap();
         assert_eq!(split_filter[0], ".");
@@ -399,8 +457,8 @@ mod tests {
 
     #[test]
     fn test_split_child_filter_invalid() {
-        let split_filter = split_child_filter(".=crabby");
-        assert_eq!(true, split_filter.is_err());
+        assert_eq!(true, split_child_filter(".=crabby").is_err());
+        assert_eq!(true, split_child_filter("").is_err());
     }
 
     #[test]

@@ -1,6 +1,6 @@
 use crate::path::{
-    matches_pattern, parse_array_child_filter, parse_array_indexing_operation, ArrayIndices,
-    ParseError, SPLAT,
+    is_child_filter, is_child_filter_value_match, matches_pattern, parse_array_child_filter,
+    parse_array_indexing_operation, ArrayIndices, ParseError, SPLAT,
 };
 use log::{debug, error};
 use yaml_rust::Yaml;
@@ -18,8 +18,6 @@ fn unwrap(s: &str) -> &str {
     &s[1..s.len() - 1]
 }
 
-// TODO(wdeuschle): test the splat and empty case
-// TODO(wdeuchle): test that the handle functions are called properly, handle their errors
 fn get_array_idx<F, G>(
     path_elem: &str,
     array_node: &Vec<Yaml>,
@@ -31,13 +29,13 @@ where
     F: FnOnce(&str, &Vec<Yaml>, bool) -> Result<ArrayIndices, ParseError>,
     G: FnOnce(&str) -> Result<ArrayIndices, ParseError>,
 {
-    debug!("getting array index for path_elem: {}", path_elem);
+    debug!("getting array index for path_elem: `{}`", path_elem);
     match path_elem {
         SPLAT => {
             debug!("found splat for array, using all indices");
             ArrayIndices::Star
         }
-        _ if path_elem.starts_with('(') && path_elem.ends_with(')') => {
+        _ if is_child_filter(path_elem) => {
             let path_elem = unwrap(path_elem);
             handle_child_filter(path_elem, array_node, is_final_path_elem).unwrap_or_else(|err| {
                 error!("{}", err);
@@ -113,20 +111,6 @@ fn is_scalar(node: &Yaml) -> bool {
 }
 
 // TODO: does this belong here? maybe a filter package?
-fn is_child_filter_value_match(v: &Yaml, p: &str, is_final_path_elem: bool) -> bool {
-    if !is_final_path_elem || !(p.starts_with('(') && p.ends_with(')')) {
-        return false;
-    }
-    let p = &p[1..p.len() - 1];
-    let filter_key_and_value = crate::path::split_child_filter(p).unwrap_or_else(|err| {
-        error!("unable to parse child value filter, error: {:?}", err);
-        std::process::exit(1);
-    });
-    let v_str = &crate::convert::convert_single_node(v);
-    let filter_value = filter_key_and_value[1];
-    matches_pattern(v_str, filter_value)
-}
-
 // TODO(wdeuschle): unit test
 fn recurse<'a>(
     node: &'a Yaml,
@@ -160,7 +144,17 @@ fn recurse<'a>(
                             }
                             new_path.push_str(k_str);
                             traverse(v, head, tail, new_path, head == SPLAT, visited);
-                        } else if is_child_filter_value_match(v, head, tail.len() == 0) {
+                        } else if is_child_filter(head) && tail.len() == 0 {
+                            // tail.len() == 0 indicates this is a final path elem
+                            let matches = is_child_filter_value_match(v, unwrap(head))
+                                .unwrap_or_else(|err| {
+                                    error!("{}", err);
+                                    std::process::exit(1);
+                                });
+                            if !matches {
+                                debug!("did not match on key: `{}`, continue", k_str);
+                                continue;
+                            }
                             debug!("match on child value filter: {}", head);
                             let mut new_path = path.clone();
                             if new_path.len() > 0 {
@@ -169,7 +163,7 @@ fn recurse<'a>(
                             new_path.push_str(k_str);
                             traverse(v, head, tail, new_path, false, visited);
                         } else {
-                            debug!("did not match on key: {}, continue", k_str);
+                            debug!("did not match on key: `{}`, continue", k_str);
                         }
                     }
                     _ => {
@@ -296,57 +290,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_is_child_filter_value_match_not_final_elem() {
-        assert!(!is_child_filter_value_match(
-            &Yaml::String("crabby".to_string()),
-            "",
-            false
-        ));
-    }
-
-    #[test]
-    fn test_is_child_filter_value_match_not_a_filter() {
-        assert!(!is_child_filter_value_match(
-            &Yaml::String("crabby".to_string()),
-            "[.==crabby]",
-            true
-        ));
-        assert!(!is_child_filter_value_match(
-            &Yaml::String("crabby".to_string()),
-            "[.==crabby)",
-            true
-        ));
-        assert!(!is_child_filter_value_match(
-            &Yaml::String("crabby".to_string()),
-            "(.==crabby]",
-            true
-        ));
-    }
-
-    #[test]
-    fn test_is_child_filter_value_match_not_a_match() {
-        assert!(!is_child_filter_value_match(
-            &Yaml::String("crabby".to_string()),
-            "(.==nope)",
-            true
-        ));
-    }
-
-    #[test]
-    fn test_is_child_filter_value_match_is_a_match() {
-        assert!(is_child_filter_value_match(
-            &Yaml::String("crabby".to_string()),
-            "(.==crabby)",
-            true
-        ));
-        assert!(is_child_filter_value_match(
-            &Yaml::String("crabby".to_string()),
-            "(.==crab*)",
-            true
-        ));
-    }
-
-    #[test]
     fn get_array_idx_splat() {
         assert_eq!(
             ArrayIndices::Star,
@@ -356,6 +299,36 @@ mod tests {
                 false,
                 parse_array_child_filter,
                 parse_array_indexing_operation
+            )
+        );
+    }
+
+    #[test]
+    fn get_array_idx_calls_parse_array_child_filter() {
+        let ret_val = 1;
+        assert_eq!(
+            ArrayIndices::Indices(vec![ret_val]),
+            get_array_idx(
+                "(.==crab)",
+                &vec![Yaml::Null],
+                false,
+                |_: &str, _: &Vec<Yaml>, _: bool| Ok(ArrayIndices::Indices(vec![ret_val])),
+                parse_array_indexing_operation
+            )
+        );
+    }
+
+    #[test]
+    fn get_array_idx_calls_parse_array_indexing_operation() {
+        let ret_val = 1;
+        assert_eq!(
+            ArrayIndices::Indices(vec![ret_val]),
+            get_array_idx(
+                "[2]",
+                &vec![Yaml::Null],
+                false,
+                parse_array_child_filter,
+                |_: &str| Ok(ArrayIndices::Indices(vec![ret_val])),
             )
         );
     }
