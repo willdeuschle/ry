@@ -166,32 +166,28 @@ pub fn parse_path(path: &str) -> Result<Vec<String>, ParseError> {
     Ok(parsed_path)
 }
 
-// TODO: audit for integration tests
 pub fn split_child_filter(filter: &str) -> Result<[&str; 2], ParseError> {
     let split_filter: Vec<&str> = filter.split("==").collect();
     if split_filter.len() != 2 {
-        return Err(ParseError::new("invalid filter"));
+        return Err(ParseError::new(&format!(
+            "invalid child filter: `{}`",
+            filter
+        )));
     }
     let mut split_filter_array = ["", ""];
     split_filter_array.copy_from_slice(&split_filter);
     Ok(split_filter_array)
 }
 
-// we should have this return an error and handle it in get_array_idx
-// this will allow us to test those conditions as well - yes still todo
-// should this get moved into path?
 pub fn parse_array_child_filter(
     path_elem: &str,
     array_node: &Vec<Yaml>,
     is_final_path_elem: bool,
-) -> ArrayIndices {
+) -> Result<ArrayIndices, ParseError> {
     if path_elem == "*" {
-        return ArrayIndices::Star;
+        return Ok(ArrayIndices::Star);
     }
-    let filter_key_and_value = crate::path::split_child_filter(path_elem).unwrap_or_else(|err| {
-        error!("unable to parse child filter, error: {:?}", err);
-        std::process::exit(1);
-    });
+    let filter_key_and_value = crate::path::split_child_filter(path_elem)?;
     let (filter_path, filter_value) = (filter_key_and_value[0], filter_key_and_value[1]);
 
     // parse filter_path
@@ -244,25 +240,19 @@ pub fn parse_array_child_filter(
         }
         debug!("child node filtering matched indices: {:?}", indices);
     }
-    return ArrayIndices::Indices(indices);
+    Ok(ArrayIndices::Indices(indices))
 }
 
-// we should have this return an error and handle it in get_array_idx
-// this will allow us to test those conditions as well - yes still todo
-// should this get moved into path?
-pub fn parse_array_indexing_operation(path_elem: &str) -> ArrayIndices {
+pub fn parse_array_indexing_operation(path_elem: &str) -> Result<ArrayIndices, ParseError> {
     if path_elem == "*" {
-        return ArrayIndices::Star;
+        return Ok(ArrayIndices::Star);
     }
     match path_elem.parse::<usize>() {
-        Ok(i) => ArrayIndices::Indices(vec![i]),
-        Err(e) => {
-            error!(
-                "unable to parse array index `{:?}`, error: {:?}",
-                path_elem, e
-            );
-            std::process::exit(1);
-        }
+        Ok(i) => Ok(ArrayIndices::Indices(vec![i])),
+        Err(e) => Err(ParseError(format!(
+            "unable to parse array index `{:?}`, error: {:?}",
+            path_elem, e
+        ))),
     }
 }
 
@@ -406,16 +396,30 @@ mod tests {
     }
 
     #[test]
+    fn test_split_child_filter_valid() {
+        let split_filter = split_child_filter(".==crabby").unwrap();
+        assert_eq!(split_filter[0], ".");
+        assert_eq!(split_filter[1], "crabby");
+    }
+
+    #[test]
+    fn test_split_child_filter_invalid() {
+        let split_filter = split_child_filter(".=crabby");
+        assert_eq!(true, split_filter.is_err());
+    }
+
+    #[test]
     fn test_parse_array_child_filter_star() {
         assert_eq!(
-            parse_array_child_filter("*", &vec![Yaml::Null], false),
-            ArrayIndices::Star
+            ArrayIndices::Star,
+            parse_array_child_filter("*", &vec![Yaml::Null], false).unwrap()
         );
     }
 
     #[test]
     fn test_parse_array_child_filter_final() {
         assert_eq!(
+            ArrayIndices::Indices(vec![0, 2]),
             parse_array_child_filter(
                 ".==dog*",
                 &vec![
@@ -424,8 +428,8 @@ mod tests {
                     Yaml::String("doggerino".to_string())
                 ],
                 true
-            ),
-            ArrayIndices::Indices(vec![0, 2])
+            )
+            .unwrap()
         );
     }
 
@@ -449,21 +453,43 @@ mod tests {
             _ => panic!("invalid doc, not an array"),
         };
         assert_eq!(
-            parse_array_child_filter("b.d==dog*", array, false),
-            ArrayIndices::Indices(vec![0, 2])
+            ArrayIndices::Indices(vec![0, 2]),
+            parse_array_child_filter("b.d==dog*", array, false).unwrap()
         );
     }
 
     #[test]
+    fn test_parse_array_child_filter_invalid() {
+        use yaml_rust::YamlLoader;
+        let docs_str = "
+- b";
+        let doc = &YamlLoader::load_from_str(&docs_str).unwrap()[0];
+
+        let array = match doc {
+            Yaml::Array(v) => v,
+            _ => panic!("invalid doc, not an array"),
+        };
+        assert_eq!(true, parse_array_child_filter(".=b", array, false).is_err());
+    }
+
+    #[test]
     fn test_parse_array_indexing_operation_wildcard() {
-        assert_eq!(ArrayIndices::Star, parse_array_indexing_operation("*"));
+        assert_eq!(
+            ArrayIndices::Star,
+            parse_array_indexing_operation("*").unwrap()
+        );
     }
 
     #[test]
     fn test_parse_array_indexing_operation_number_path_elem() {
         assert_eq!(
             ArrayIndices::Indices(vec![4]),
-            parse_array_indexing_operation("4")
+            parse_array_indexing_operation("4").unwrap()
         );
+    }
+
+    #[test]
+    fn test_parse_array_indexing_operation_fails_invalid() {
+        assert_eq!(true, parse_array_indexing_operation("a").is_err());
     }
 }

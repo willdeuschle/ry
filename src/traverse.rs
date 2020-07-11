@@ -1,5 +1,6 @@
 use crate::path::{
-    matches_pattern, parse_array_child_filter, parse_array_indexing_operation, ArrayIndices, SPLAT,
+    matches_pattern, parse_array_child_filter, parse_array_indexing_operation, ArrayIndices,
+    ParseError, SPLAT,
 };
 use log::{debug, error};
 use yaml_rust::Yaml;
@@ -27,8 +28,8 @@ fn get_array_idx<F, G>(
     handle_indexing_operation: G,
 ) -> ArrayIndices
 where
-    F: FnOnce(&str, &Vec<Yaml>, bool) -> ArrayIndices,
-    G: FnOnce(&str) -> ArrayIndices,
+    F: FnOnce(&str, &Vec<Yaml>, bool) -> Result<ArrayIndices, ParseError>,
+    G: FnOnce(&str) -> Result<ArrayIndices, ParseError>,
 {
     debug!("getting array index for path_elem: {}", path_elem);
     match path_elem {
@@ -38,11 +39,17 @@ where
         }
         _ if path_elem.starts_with('(') && path_elem.ends_with(')') => {
             let path_elem = unwrap(path_elem);
-            handle_child_filter(path_elem, array_node, is_final_path_elem)
+            handle_child_filter(path_elem, array_node, is_final_path_elem).unwrap_or_else(|err| {
+                error!("{}", err);
+                std::process::exit(1);
+            })
         }
         _ if path_elem.starts_with('[') && path_elem.ends_with(']') => {
             let path_elem = unwrap(path_elem);
-            handle_indexing_operation(path_elem)
+            handle_indexing_operation(path_elem).unwrap_or_else(|err| {
+                error!("{}", err);
+                std::process::exit(1);
+            })
         }
         _ => {
             debug!(
