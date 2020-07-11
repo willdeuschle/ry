@@ -77,7 +77,7 @@ pub fn traverse<'a>(
             } else {
                 // final path element was a splat
                 if is_scalar(node) {
-                    visit(node, head, tail, path, visited);
+                    visit(node, tail, path, visited);
                 } else {
                     recurse(node, head, tail, path, false, visited);
                 }
@@ -94,7 +94,7 @@ pub fn traverse<'a>(
         recurse(node, &tail[0], &tail[1..], path, false, visited)
     } else {
         // the parsed path is empty or we have a scalar, try visiting
-        visit(node, head, tail, path, visited);
+        visit(node, tail, path, visited);
     }
 }
 
@@ -110,7 +110,6 @@ fn is_scalar(node: &Yaml) -> bool {
     }
 }
 
-// TODO: does this belong here? maybe a filter package?
 // TODO(wdeuschle): unit test
 fn recurse<'a>(
     node: &'a Yaml,
@@ -216,14 +215,7 @@ fn recurse<'a>(
     }
 }
 
-// TODO(wdeuschle): unit test
-fn visit<'a>(
-    node: &'a Yaml,
-    _head: &str,
-    tail: &[String],
-    path: String,
-    visited: &mut Vec<VisitedNode<'a>>,
-) {
+fn visit<'a>(node: &'a Yaml, tail: &[String], path: String, visited: &mut Vec<VisitedNode<'a>>) {
     if tail.len() == 0 {
         debug!("tail length is 0, visiting leaf node {:?}", node);
         match node {
@@ -287,6 +279,7 @@ fn visit<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use yaml_rust::YamlLoader;
 
     #[test]
     fn get_array_idx_splat() {
@@ -356,5 +349,150 @@ mod tests {
 
         let s3 = "[crabby]";
         assert_eq!("crabby", unwrap(s3));
+    }
+
+    #[test]
+    fn test_visit_has_tail() {
+        let mut visited = Vec::<VisitedNode>::new();
+        let node = Yaml::String(String::from(""));
+        visit(
+            &node,
+            &[String::from("crab")],
+            String::from(""),
+            &mut visited,
+        );
+        assert_eq!(visited.len(), 0);
+    }
+
+    #[test]
+    fn test_visit_tail() {
+        let mut visited = Vec::<VisitedNode>::new();
+        assert_eq!(visited.len(), 0);
+
+        let node = Yaml::String(String::from("crab"));
+        visit(
+            &node,
+            &[],
+            String::from(format!("path {}", visited.len())),
+            &mut visited,
+        );
+        assert_eq!(visited.len(), 1);
+        assert_eq!(visited[visited.len() - 1].yml, &node);
+        assert_eq!(
+            visited[visited.len() - 1].path,
+            format!("path {}", visited.len() - 1)
+        );
+
+        let node = Yaml::Integer(1);
+        visit(
+            &node,
+            &[],
+            String::from(format!("path {}", visited.len())),
+            &mut visited,
+        );
+        assert_eq!(visited.len(), 2);
+        assert_eq!(visited[visited.len() - 1].yml, &node);
+        assert_eq!(
+            visited[visited.len() - 1].path,
+            format!("path {}", visited.len() - 1)
+        );
+
+        let node = Yaml::Real(0.01.to_string());
+        visit(
+            &node,
+            &[],
+            String::from(format!("path {}", visited.len())),
+            &mut visited,
+        );
+        assert_eq!(visited.len(), 3);
+        assert_eq!(visited[visited.len() - 1].yml, &node);
+        assert_eq!(
+            visited[visited.len() - 1].path,
+            format!("path {}", visited.len() - 1)
+        );
+
+        let node = Yaml::Boolean(true);
+        visit(
+            &node,
+            &[],
+            String::from(format!("path {}", visited.len())),
+            &mut visited,
+        );
+        assert_eq!(visited.len(), 4);
+        assert_eq!(visited[visited.len() - 1].yml, &node);
+        assert_eq!(
+            visited[visited.len() - 1].path,
+            format!("path {}", visited.len() - 1)
+        );
+
+        let hash_str = "a: b";
+        let hash = &YamlLoader::load_from_str(hash_str).unwrap()[0];
+        match hash {
+            Yaml::Hash(_) => {}
+            _ => panic!("invalid, not hash type"),
+        };
+
+        let node = hash;
+        visit(
+            &node,
+            &[],
+            String::from(format!("path {}", visited.len())),
+            &mut visited,
+        );
+        assert_eq!(visited.len(), 5);
+        assert_eq!(visited[visited.len() - 1].yml, node);
+        assert_eq!(
+            visited[visited.len() - 1].path,
+            format!("path {}", visited.len() - 1)
+        );
+
+        let array_str = "- a";
+        let array = &YamlLoader::load_from_str(array_str).unwrap()[0];
+        match array {
+            Yaml::Array(_) => {}
+            _ => panic!("invalid, not array type"),
+        };
+
+        let node = array;
+        visit(
+            &node,
+            &[],
+            String::from(format!("path {}", visited.len())),
+            &mut visited,
+        );
+        assert_eq!(visited.len(), 6);
+        assert_eq!(visited[visited.len() - 1].yml, node);
+        assert_eq!(
+            visited[visited.len() - 1].path,
+            format!("path {}", visited.len() - 1)
+        );
+
+        let node = Yaml::Null;
+        visit(
+            &node,
+            &[],
+            String::from(format!("path {}", visited.len())),
+            &mut visited,
+        );
+        assert_eq!(visited.len(), 7);
+        assert_eq!(visited[visited.len() - 1].yml, &node);
+        assert_eq!(
+            visited[visited.len() - 1].path,
+            format!("path {}", visited.len() - 1)
+        );
+
+        let node = Yaml::BadValue;
+        visit(
+            &node,
+            &[],
+            String::from(format!("path {}", visited.len())),
+            &mut visited,
+        );
+        assert_eq!(visited.len(), 8);
+        assert_eq!(visited[visited.len() - 1].yml, &node);
+        assert_eq!(
+            visited[visited.len() - 1].path,
+            format!("path {}", visited.len() - 1)
+        );
     }
 }
