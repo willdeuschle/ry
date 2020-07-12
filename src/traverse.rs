@@ -128,7 +128,7 @@ fn recurse<'a>(
     }
 }
 
-fn extend_path(p: &String, extend: &str) -> String {
+fn extend_hash_path(p: &String, extend: &str) -> String {
     let mut new_path = p.clone();
     if new_path.len() > 0 {
         new_path.push_str(".")
@@ -154,12 +154,12 @@ fn recurse_hash<'a, F>(
                 if following_splat {
                     // traverse deeper, still following a splat
                     debug!("following splat in map for key: {}, traverse", k_str);
-                    let new_path = extend_path(&path, k_str);
+                    let new_path = extend_hash_path(&path, k_str);
                     traverse(v, head, tail, new_path, true, visited);
                 }
                 if matches_pattern(k_str, head) {
                     debug!("match on key: {}, traverse", k_str);
-                    let new_path = extend_path(&path, k_str);
+                    let new_path = extend_hash_path(&path, k_str);
                     traverse(v, head, tail, new_path, head == SPLAT, visited);
                 // tail.len() == 0 indicates this is a final path elem
                 } else if is_child_filter(head) && tail.len() == 0 {
@@ -173,7 +173,7 @@ fn recurse_hash<'a, F>(
                         continue;
                     }
                     debug!("match on child value filter: `{}`", head);
-                    let new_path = extend_path(&path, k_str);
+                    let new_path = extend_hash_path(&path, k_str);
                     traverse(v, head, tail, new_path, false, visited);
                 } else {
                     debug!("did not match on key: `{}`, continue", k_str);
@@ -185,6 +185,12 @@ fn recurse_hash<'a, F>(
             }
         }
     }
+}
+
+fn extend_array_path(p: &String, idx: usize) -> String {
+    let mut new_path = p.clone();
+    new_path.push_str(&format!("[{}]", idx));
+    new_path
 }
 
 // TODO(wdeuschle): unit test
@@ -207,8 +213,7 @@ fn recurse_array<'a, F>(
         );
         let array_indices: Vec<usize> = (0..array.len()).collect();
         for array_idx in array_indices {
-            let mut new_path = path.clone();
-            new_path.push_str(&format!(".[{}]", array_idx));
+            let new_path = extend_array_path(&path, array_idx);
             traverse(&array[array_idx], head, tail, new_path, true, visited);
         }
     }
@@ -232,8 +237,7 @@ fn recurse_array<'a, F>(
     };
     debug!("match on array indices: {:?}, traverse", array_indices);
     for array_idx in array_indices {
-        let mut new_path = path.clone();
-        new_path.push_str(&format!(".[{}]", array_idx));
+        let new_path = extend_array_path(&path, array_idx);
         traverse(
             &array[array_idx],
             head,
@@ -527,14 +531,14 @@ mod tests {
     }
 
     #[test]
-    fn test_extend_path() {
+    fn test_extend_hash_path() {
         let no_path = "".to_string();
         let existing_path = "existing".to_string();
         let extend = "extend";
 
-        assert_eq!(extend_path(&no_path, extend), extend);
+        assert_eq!(extend_hash_path(&no_path, extend), extend);
         assert_eq!(
-            extend_path(&existing_path, extend),
+            extend_hash_path(&existing_path, extend),
             format!("{}.{}", existing_path, extend)
         );
     }
@@ -550,7 +554,7 @@ mod tests {
         let head = "";
         let tail = &[];
         let path = "start";
-        let (is_splat, becomes_splat) = (true, true);
+        let (following_splat, becomes_splat) = (true, true);
         let mut visited = Vec::<VisitedNode>::new();
         let visited_node = Yaml::String("test".to_string());
         recurse_hash(
@@ -558,7 +562,7 @@ mod tests {
             head,
             tail,
             String::from(path),
-            is_splat,
+            following_splat,
             &mut visited,
             |_: &Yaml,
              _: &str,
@@ -593,7 +597,7 @@ mod tests {
         let head = "a";
         let tail = &[];
         let path = "start";
-        let (is_splat, becomes_splat_first, becomes_splat_second) = (true, true, false);
+        let (following_splat, becomes_splat_first, becomes_splat_second) = (true, true, false);
         let mut visited = Vec::<VisitedNode>::new();
         let visited_node = Yaml::String("test".to_string());
         recurse_hash(
@@ -601,7 +605,7 @@ mod tests {
             head,
             tail,
             String::from(path),
-            is_splat,
+            following_splat,
             &mut visited,
             |_: &Yaml,
              _: &str,
@@ -642,7 +646,7 @@ mod tests {
         let head = "a";
         let tail = &[];
         let path = "start";
-        let (is_splat, becomes_splat) = (false, false);
+        let (following_splat, becomes_splat) = (false, false);
         let mut visited = Vec::<VisitedNode>::new();
         let visited_node = Yaml::String("test".to_string());
         recurse_hash(
@@ -650,7 +654,7 @@ mod tests {
             head,
             tail,
             String::from(path),
-            is_splat,
+            following_splat,
             &mut visited,
             |_: &Yaml,
              _: &str,
@@ -685,7 +689,7 @@ mod tests {
         let head = SPLAT;
         let tail = &[];
         let path = "start";
-        let (is_splat, becomes_splat) = (false, true);
+        let (following_splat, becomes_splat) = (false, true);
         let mut visited = Vec::<VisitedNode>::new();
         let visited_node = Yaml::String("test".to_string());
         recurse_hash(
@@ -693,7 +697,7 @@ mod tests {
             head,
             tail,
             String::from(path),
-            is_splat,
+            following_splat,
             &mut visited,
             |_: &Yaml,
              _: &str,
@@ -728,7 +732,7 @@ mod tests {
         let head = "(.==b)";
         let tail = &[];
         let path = "start";
-        let (is_splat, becomes_splat) = (false, false);
+        let (following_splat, becomes_splat) = (false, false);
         let mut visited = Vec::<VisitedNode>::new();
         let visited_node = Yaml::String("test".to_string());
         recurse_hash(
@@ -736,7 +740,7 @@ mod tests {
             head,
             tail,
             String::from(path),
-            is_splat,
+            following_splat,
             &mut visited,
             |_: &Yaml,
              _: &str,
@@ -771,7 +775,7 @@ mod tests {
         let head = "(.==b)";
         let tail = &["not empty".to_string()];
         let path = "start";
-        let (is_splat, becomes_splat) = (false, false);
+        let (following_splat, becomes_splat) = (false, false);
         let mut visited = Vec::<VisitedNode>::new();
         let visited_node = Yaml::String("test".to_string());
         recurse_hash(
@@ -779,7 +783,7 @@ mod tests {
             head,
             tail,
             String::from(path),
-            is_splat,
+            following_splat,
             &mut visited,
             |_: &Yaml,
              _: &str,
@@ -808,7 +812,7 @@ mod tests {
         let head = "(.==c)";
         let tail = &[];
         let path = "start";
-        let (is_splat, becomes_splat) = (false, false);
+        let (following_splat, becomes_splat) = (false, false);
         let mut visited = Vec::<VisitedNode>::new();
         let visited_node = Yaml::String("test".to_string());
         recurse_hash(
@@ -816,7 +820,7 @@ mod tests {
             head,
             tail,
             String::from(path),
-            is_splat,
+            following_splat,
             &mut visited,
             |_: &Yaml,
              _: &str,
@@ -845,7 +849,7 @@ mod tests {
         let head = "b";
         let tail = &[];
         let path = "start";
-        let (is_splat, becomes_splat) = (false, false);
+        let (following_splat, becomes_splat) = (false, false);
         let mut visited = Vec::<VisitedNode>::new();
         let visited_node = Yaml::String("test".to_string());
         recurse_hash(
@@ -853,7 +857,7 @@ mod tests {
             head,
             tail,
             String::from(path),
-            is_splat,
+            following_splat,
             &mut visited,
             |_: &Yaml,
              _: &str,
@@ -869,5 +873,443 @@ mod tests {
             },
         );
         assert_eq!(visited.len(), 0);
+    }
+
+    #[test]
+    fn test_recurse_array_following_splat_no_continue() {
+        let array_str = "
+- a
+- b";
+        let array_yaml = &YamlLoader::load_from_str(array_str).unwrap()[0];
+        let array = match array_yaml {
+            Yaml::Array(a) => a,
+            _ => panic!("invalid, not an array type"),
+        };
+        let head = "";
+        let tail = &[];
+        let path = "start";
+        let (following_splat, becomes_splat) = (true, true);
+        let mut visited = Vec::<VisitedNode>::new();
+        let visited_node = Yaml::String("test".to_string());
+        recurse_array(
+            array,
+            head,
+            tail,
+            String::from(path),
+            following_splat,
+            &mut visited,
+            |_: &Yaml,
+             _: &str,
+             _: &[String],
+             path: String,
+             still_splat: bool,
+             inner_visited: &mut Vec<VisitedNode>| {
+                assert_eq!(still_splat, becomes_splat);
+                inner_visited.push(VisitedNode {
+                    yml: &visited_node,
+                    path,
+                });
+            },
+        );
+        assert_eq!(visited.len(), 2);
+        assert_eq!(visited[0].yml, &visited_node);
+        assert_eq!(visited[1].yml, &visited_node);
+        assert_eq!(visited[0].path, format!("{}[0]", path));
+        assert_eq!(visited[1].path, format!("{}[1]", path));
+    }
+
+    #[test]
+    fn test_extend_array_path() {
+        assert_eq!(extend_array_path(&"path".to_string(), 0), "path[0]");
+    }
+
+    #[test]
+    fn test_recurse_array_following_splat_continues() {
+        let array_str = "
+- a
+- b";
+        let array_yaml = &YamlLoader::load_from_str(array_str).unwrap()[0];
+        let array = match array_yaml {
+            Yaml::Array(a) => a,
+            _ => panic!("invalid, not an array type"),
+        };
+        let head = SPLAT;
+        let tail = &[];
+        let path = "start";
+        let (following_splat, becomes_splat) = (true, true);
+        let mut visited = Vec::<VisitedNode>::new();
+        let visited_node = Yaml::String("test".to_string());
+        recurse_array(
+            array,
+            head,
+            tail,
+            String::from(path),
+            following_splat,
+            &mut visited,
+            |_: &Yaml,
+             _: &str,
+             _: &[String],
+             path: String,
+             still_splat: bool,
+             inner_visited: &mut Vec<VisitedNode>| {
+                assert_eq!(still_splat, becomes_splat);
+                inner_visited.push(VisitedNode {
+                    yml: &visited_node,
+                    path,
+                });
+            },
+        );
+        assert_eq!(visited.len(), 4);
+        assert_eq!(visited[0].yml, &visited_node);
+        assert_eq!(visited[1].yml, &visited_node);
+        assert_eq!(visited[2].yml, &visited_node);
+        assert_eq!(visited[3].yml, &visited_node);
+        assert_eq!(visited[0].path, format!("{}[0]", path));
+        assert_eq!(visited[1].path, format!("{}[1]", path));
+        // note that these are repeated paths because the splat continues to match
+        assert_eq!(visited[2].path, format!("{}[0]", path));
+        assert_eq!(visited[3].path, format!("{}[1]", path));
+    }
+
+    #[test]
+    fn test_recurse_array_matching_splat() {
+        let array_str = "
+- a
+- b";
+        let array_yaml = &YamlLoader::load_from_str(array_str).unwrap()[0];
+        let array = match array_yaml {
+            Yaml::Array(a) => a,
+            _ => panic!("invalid, not an array type"),
+        };
+        let head = SPLAT;
+        let tail = &[];
+        let path = "start";
+        let (following_splat, becomes_splat) = (false, true);
+        let mut visited = Vec::<VisitedNode>::new();
+        let visited_node = Yaml::String("test".to_string());
+        recurse_array(
+            array,
+            head,
+            tail,
+            String::from(path),
+            following_splat,
+            &mut visited,
+            |_: &Yaml,
+             _: &str,
+             _: &[String],
+             path: String,
+             still_splat: bool,
+             inner_visited: &mut Vec<VisitedNode>| {
+                assert_eq!(still_splat, becomes_splat);
+                inner_visited.push(VisitedNode {
+                    yml: &visited_node,
+                    path,
+                });
+            },
+        );
+        assert_eq!(visited.len(), 2);
+        assert_eq!(visited[0].yml, &visited_node);
+        assert_eq!(visited[1].yml, &visited_node);
+        assert_eq!(visited[0].path, format!("{}[0]", path));
+        assert_eq!(visited[1].path, format!("{}[1]", path));
+    }
+
+    #[test]
+    fn test_recurse_array_following_splat_continues_on_sub_match() {
+        let array_str = "
+- a
+- b";
+        let array_yaml = &YamlLoader::load_from_str(array_str).unwrap()[0];
+        let array = match array_yaml {
+            Yaml::Array(a) => a,
+            _ => panic!("invalid, not an array type"),
+        };
+        let head = "[1]";
+        let tail = &[];
+        let path = "start";
+        let (following_splat, becomes_splat_first, becomes_splat_second) = (true, true, false);
+        let mut visited = Vec::<VisitedNode>::new();
+        let visited_node = Yaml::String("test".to_string());
+        recurse_array(
+            array,
+            head,
+            tail,
+            String::from(path),
+            following_splat,
+            &mut visited,
+            |_: &Yaml,
+             _: &str,
+             _: &[String],
+             path: String,
+             still_splat: bool,
+             inner_visited: &mut Vec<VisitedNode>| {
+                if inner_visited.len() < array.len() {
+                    assert_eq!(still_splat, becomes_splat_first);
+                } else {
+                    assert_eq!(still_splat, becomes_splat_second);
+                }
+                inner_visited.push(VisitedNode {
+                    yml: &visited_node,
+                    path,
+                });
+            },
+        );
+        assert_eq!(visited.len(), 3);
+        assert_eq!(visited[0].yml, &visited_node);
+        assert_eq!(visited[1].yml, &visited_node);
+        assert_eq!(visited[2].yml, &visited_node);
+        assert_eq!(visited[0].path, format!("{}[0]", path));
+        assert_eq!(visited[1].path, format!("{}[1]", path));
+        // note that this is a repeated paths because the splat continues to match
+        assert_eq!(visited[2].path, format!("{}[1]", path));
+    }
+
+    #[test]
+    fn test_recurse_array_match_all() {
+        let array_str = "
+- a
+- b";
+        let array_yaml = &YamlLoader::load_from_str(array_str).unwrap()[0];
+        let array = match array_yaml {
+            Yaml::Array(a) => a,
+            _ => panic!("invalid, not an array type"),
+        };
+        let head = "[*]";
+        let tail = &[];
+        let path = "start";
+        let (following_splat, becomes_splat) = (false, false);
+        let mut visited = Vec::<VisitedNode>::new();
+        let visited_node = Yaml::String("test".to_string());
+        recurse_array(
+            array,
+            head,
+            tail,
+            String::from(path),
+            following_splat,
+            &mut visited,
+            |_: &Yaml,
+             _: &str,
+             _: &[String],
+             path: String,
+             still_splat: bool,
+             inner_visited: &mut Vec<VisitedNode>| {
+                assert_eq!(still_splat, becomes_splat);
+                inner_visited.push(VisitedNode {
+                    yml: &visited_node,
+                    path,
+                });
+            },
+        );
+        assert_eq!(visited.len(), 2);
+        assert_eq!(visited[0].yml, &visited_node);
+        assert_eq!(visited[1].yml, &visited_node);
+        assert_eq!(visited[0].path, format!("{}[0]", path));
+        assert_eq!(visited[1].path, format!("{}[1]", path));
+    }
+
+    #[test]
+    fn test_recurse_array_match_one() {
+        let array_str = "
+- a
+- b";
+        let array_yaml = &YamlLoader::load_from_str(array_str).unwrap()[0];
+        let array = match array_yaml {
+            Yaml::Array(a) => a,
+            _ => panic!("invalid, not an array type"),
+        };
+        let head = "[1]";
+        let tail = &[];
+        let path = "start";
+        let (following_splat, becomes_splat) = (false, false);
+        let mut visited = Vec::<VisitedNode>::new();
+        let visited_node = Yaml::String("test".to_string());
+        recurse_array(
+            array,
+            head,
+            tail,
+            String::from(path),
+            following_splat,
+            &mut visited,
+            |_: &Yaml,
+             _: &str,
+             _: &[String],
+             path: String,
+             still_splat: bool,
+             inner_visited: &mut Vec<VisitedNode>| {
+                assert_eq!(still_splat, becomes_splat);
+                inner_visited.push(VisitedNode {
+                    yml: &visited_node,
+                    path,
+                });
+            },
+        );
+        assert_eq!(visited.len(), 1);
+        assert_eq!(visited[0].yml, &visited_node);
+        assert_eq!(visited[0].path, format!("{}[1]", path));
+    }
+
+    #[test]
+    fn test_recurse_array_match_none_idx_too_large() {
+        let array_str = "
+- a
+- b";
+        let array_yaml = &YamlLoader::load_from_str(array_str).unwrap()[0];
+        let array = match array_yaml {
+            Yaml::Array(a) => a,
+            _ => panic!("invalid, not an array type"),
+        };
+        let head = "[2]";
+        let tail = &[];
+        let path = "start";
+        let (following_splat, becomes_splat) = (false, false);
+        let mut visited = Vec::<VisitedNode>::new();
+        let visited_node = Yaml::String("test".to_string());
+        recurse_array(
+            array,
+            head,
+            tail,
+            String::from(path),
+            following_splat,
+            &mut visited,
+            |_: &Yaml,
+             _: &str,
+             _: &[String],
+             path: String,
+             still_splat: bool,
+             inner_visited: &mut Vec<VisitedNode>| {
+                assert_eq!(still_splat, becomes_splat);
+                inner_visited.push(VisitedNode {
+                    yml: &visited_node,
+                    path,
+                });
+            },
+        );
+        assert_eq!(visited.len(), 0);
+    }
+
+    #[test]
+    fn test_recurse_array_partially_matching_child_value_filter() {
+        let array_str = "
+- crab
+- bear
+- crabby";
+        let array_yaml = &YamlLoader::load_from_str(array_str).unwrap()[0];
+        let array = match array_yaml {
+            Yaml::Array(a) => a,
+            _ => panic!("invalid, not an array type"),
+        };
+        let head = "(.==crab*)";
+        let tail = &[];
+        let path = "start";
+        let (following_splat, becomes_splat) = (false, false);
+        let mut visited = Vec::<VisitedNode>::new();
+        let visited_node = Yaml::String("test".to_string());
+        recurse_array(
+            array,
+            head,
+            tail,
+            String::from(path),
+            following_splat,
+            &mut visited,
+            |_: &Yaml,
+             _: &str,
+             _: &[String],
+             path: String,
+             still_splat: bool,
+             inner_visited: &mut Vec<VisitedNode>| {
+                assert_eq!(still_splat, becomes_splat);
+                inner_visited.push(VisitedNode {
+                    yml: &visited_node,
+                    path,
+                });
+            },
+        );
+        assert_eq!(visited.len(), 2);
+        assert_eq!(visited[0].yml, &visited_node);
+        assert_eq!(visited[1].yml, &visited_node);
+        assert_eq!(visited[0].path, format!("{}[0]", path));
+        assert_eq!(visited[1].path, format!("{}[2]", path));
+    }
+
+    #[test]
+    fn test_recurse_array_no_matching_child_value_filter() {
+        let array_str = "
+- crab
+- crabby";
+        let array_yaml = &YamlLoader::load_from_str(array_str).unwrap()[0];
+        let array = match array_yaml {
+            Yaml::Array(a) => a,
+            _ => panic!("invalid, not an array type"),
+        };
+        let head = "(.==bear*)";
+        let tail = &[];
+        let path = "start";
+        let (following_splat, becomes_splat) = (false, false);
+        let mut visited = Vec::<VisitedNode>::new();
+        let visited_node = Yaml::String("test".to_string());
+        recurse_array(
+            array,
+            head,
+            tail,
+            String::from(path),
+            following_splat,
+            &mut visited,
+            |_: &Yaml,
+             _: &str,
+             _: &[String],
+             path: String,
+             still_splat: bool,
+             inner_visited: &mut Vec<VisitedNode>| {
+                assert_eq!(still_splat, becomes_splat);
+                inner_visited.push(VisitedNode {
+                    yml: &visited_node,
+                    path,
+                });
+            },
+        );
+        assert_eq!(visited.len(), 0);
+    }
+
+    #[test]
+    fn test_recurse_array_star_matching_child_filter() {
+        let array_str = "
+- crab
+- crabby";
+        let array_yaml = &YamlLoader::load_from_str(array_str).unwrap()[0];
+        let array = match array_yaml {
+            Yaml::Array(a) => a,
+            _ => panic!("invalid, not an array type"),
+        };
+        let head = "(.==*)";
+        let tail = &[];
+        let path = "start";
+        let (following_splat, becomes_splat) = (false, false);
+        let mut visited = Vec::<VisitedNode>::new();
+        let visited_node = Yaml::String("test".to_string());
+        recurse_array(
+            array,
+            head,
+            tail,
+            String::from(path),
+            following_splat,
+            &mut visited,
+            |_: &Yaml,
+             _: &str,
+             _: &[String],
+             path: String,
+             still_splat: bool,
+             inner_visited: &mut Vec<VisitedNode>| {
+                assert_eq!(still_splat, becomes_splat);
+                inner_visited.push(VisitedNode {
+                    yml: &visited_node,
+                    path,
+                });
+            },
+        );
+        assert_eq!(visited.len(), 2);
+        assert_eq!(visited[0].yml, &visited_node);
+        assert_eq!(visited[1].yml, &visited_node);
+        assert_eq!(visited[0].path, format!("{}[0]", path));
+        assert_eq!(visited[1].path, format!("{}[1]", path));
     }
 }
