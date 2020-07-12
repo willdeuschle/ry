@@ -193,7 +193,8 @@ fn extend_array_path(p: &String, idx: usize) -> String {
     new_path
 }
 
-// TODO(wdeuschle): unit test
+// NOTE(wdeuschle): not testing child node filters here (out of scope for recurse_array)
+// NOTE(wdeuschle): simplify testability by making `get_array_idx` a param
 fn recurse_array<'a, F>(
     array: &'a Array,
     head: &str,
@@ -1271,7 +1272,7 @@ mod tests {
     }
 
     #[test]
-    fn test_recurse_array_star_matching_child_filter() {
+    fn test_recurse_array_star_matching_child_value_filter() {
         let array_str = "
 - crab
 - crabby";
