@@ -1,7 +1,7 @@
 # ry
 ry searches yaml for matching paths/values.
 
-It's written in rust and inspired by [yq](https://github.com/mikefarah/yq). See [**Benchmarking**](https://github.com/willdeuschle/ry#benchmarking) for some simple comparisons between the two.
+It's written in rust and inspired by [yq](https://github.com/mikefarah/yq). See [Benchmarking](https://github.com/willdeuschle/ry#benchmarking) for some simple comparisons between the two.
 
 ---
 
@@ -9,7 +9,7 @@ It's written in rust and inspired by [yq](https://github.com/mikefarah/yq). See 
 
 `ry <yaml_file_name> <path_expression>`
 
-Returns the nodes in `yaml_file_name` matching `path_expression`. See [**Basic**](https://github.com/willdeuschle/ry#basic) for `path_expression` examples.
+Returns the nodes in `yaml_file_name` matching `path_expression`. See [Basic](https://github.com/willdeuschle/ry#basic) for `path_expression` examples.
 
 ## Basic
 
@@ -412,7 +412,7 @@ will return `2`.
 
 These simple benchmarks were run using `ry` version 0.1.1 and `yq` version 3.2.1. They're searching an 80Mb yaml file `typeIDs.yaml` pulled from the [Eve Online Static Data Export](https://developers.eveonline.com/resource/resources).
 
-[Hyperfine](https://github.com/sharkdp/hyperfine) was used for performing the benchmarks, with a warmup period of 3 runs and 10 benchmarking runs.
+[hyperfine](https://github.com/sharkdp/hyperfine) was used for performing the benchmarks, with a warmup period of 3 runs and 10 benchmarking runs.
 
 Two search patterns were tested:
 - `'123*.name.en'`
