@@ -1,5 +1,5 @@
 # ry
-ry searches yaml files for matching paths/values
+ry searches yaml for matching paths/values. It's written in rust and inspired by [yq](https://github.com/mikefarah/yq)
 
 ---
 
@@ -7,7 +7,7 @@ ry searches yaml files for matching paths/values
 
 `ry <yaml_file_name> <path_expression>`
 
-Returns the nodes in `yaml_file_name` matching `path_expression`. See **Basic** for `path_expression` examples.
+Returns the nodes in `yaml_file_name` matching `path_expression`. See [**Basic**](https://github.com/willdeuschle/ry#basic) for `path_expression` examples.
 
 ## Basic
 
@@ -40,7 +40,7 @@ will return `b`.
 
 For the `test_map.yml` file above, the following:
 ```
-cat test.yml | target/release/ry - a.b
+cat test.yml | target/release/ry - 'a.b'
 ```
 will return `1`. Note that the `-` character represents `STDIN`.
 
