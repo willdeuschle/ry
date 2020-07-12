@@ -1,5 +1,7 @@
 # ry
-ry searches yaml for matching paths/values. It's written in rust and inspired by [yq](https://github.com/mikefarah/yq)
+ry searches yaml for matching paths/values.
+
+It's written in rust and inspired by [yq](https://github.com/mikefarah/yq). See [**Benchmarking**](https://github.com/willdeuschle/ry#benchmarking) for some simple comparisons between the two.
 
 ---
 
@@ -403,3 +405,47 @@ However, if you want to know the total number of filtered results, you can use t
 ry test_filtered_length.yml 'crabs(.==a*)' --length --collect
 ```
 will return `2`.
+
+---
+
+## Benchmarking
+
+These simple benchmarks were run using `ry` version 0.1.1 and `yq` version 3.2.1. They're searching an 80Mb yaml file `typeIDs.yaml` pulled from the [Eve Online Static Data Export](https://developers.eveonline.com/resource/resources).
+
+[Hyperfine](https://github.com/sharkdp/hyperfine) was used for performing the benchmarks, with a warmup period of 3 runs and 10 benchmarking runs.
+
+Two search patterns were tested:
+- `'123*.name.en'`
+    - both `ry` and `yq` report 55 matches on `typeIDs.yaml`
+- `'12*.name.en'`
+    - both `ry` and `yq` report 494 matches on `typeIDs.yaml`
+
+The pattern `'*.name.en'` took more than 10 minutes for `yq`, so the search patterns had to be made more specific. The benchmarks were run on a 2.6 GHz Intel Core i7 processor with 32 GB of DRAM.
+
+---
+
+### ***'123\*.name.en'***
+
+| Command | Mean [s] | Min [s] | Max [s] | Relative |
+|:---|---:|---:|---:|---:|
+| `ry typeIDs.yaml '123*.name.en'` | 2.923 ± 0.029 | 2.851 | 2.959 | 1.00 |
+
+| Command | Mean [s] | Min [s] | Max [s] | Relative |
+|:---|---:|---:|---:|---:|
+| `yq r typeIDs.yaml '123*.name.en'` | 7.544 ± 0.203 | 7.440 | 8.097 | 1.00 |
+
+---
+
+### ***'12\*.name.en'***
+
+| Command | Mean [s] | Min [s] | Max [s] | Relative |
+|:---|---:|---:|---:|---:|
+| `ry typeIDs.yaml '12*.name.en'` | 2.927 ± 0.035 | 2.890 | 2.993 | 1.00 |
+
+| Command | Mean [s] | Min [s] | Max [s] | Relative |
+|:---|---:|---:|---:|---:|
+| `yq r typeIDs.yaml '12*.name.en'` | 46.173 ± 1.081 | 45.355 | 48.938 | 1.00 |
+
+---
+
+On `'123*.name.en'`, `ry` performs about 2.5x faster than `yq`, and on `'12*.name.en'`, `ry` performs about 15x faster than `yq`.
