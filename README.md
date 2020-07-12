@@ -422,8 +422,6 @@ Two search patterns were tested:
 
 The pattern `'*.name.en'` took more than 10 minutes for `yq`, so the search patterns had to be made more specific. The benchmarks were run on a 2.6 GHz Intel Core i7 processor with 32 GB of DRAM.
 
----
-
 ### ***'123\*.name.en'***
 
 | Command | Mean [s] | Min [s] | Max [s] | Relative |
@@ -433,8 +431,6 @@ The pattern `'*.name.en'` took more than 10 minutes for `yq`, so the search patt
 | Command | Mean [s] | Min [s] | Max [s] | Relative |
 |:---|---:|---:|---:|---:|
 | `yq r typeIDs.yaml '123*.name.en'` | 7.544 ± 0.203 | 7.440 | 8.097 | 1.00 |
-
----
 
 ### ***'12\*.name.en'***
 
@@ -446,6 +442,4 @@ The pattern `'*.name.en'` took more than 10 minutes for `yq`, so the search patt
 |:---|---:|---:|---:|---:|
 | `yq r typeIDs.yaml '12*.name.en'` | 46.173 ± 1.081 | 45.355 | 48.938 | 1.00 |
 
----
-
-On `'123*.name.en'`, `ry` performs about 2.5x faster than `yq`, and on `'12*.name.en'`, `ry` performs about 15x faster than `yq`.
+#### On `'123*.name.en'`, `ry` performs about 2.5x faster than `yq`, and on `'12*.name.en'`, `ry` performs about 15x faster than `yq`.
