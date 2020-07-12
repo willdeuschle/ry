@@ -442,4 +442,6 @@ The pattern `'*.name.en'` took more than 10 minutes for `yq`, so the search patt
 |:---|---:|---:|---:|---:|
 | `yq r typeIDs.yaml '12*.name.en'` | 46.173 ± 1.081 | 45.355 | 48.938 | 1.00 |
 
-#### On `'123*.name.en'`, `ry` performs about 2.5x faster than `yq`, and on `'12*.name.en'`, `ry` performs about 15x faster than `yq`.
+### Results
+
+On `'123*.name.en'`, `ry` performs about 2.5x faster than `yq`, and on `'12*.name.en'`, `ry` performs about 15x faster than `yq`.
