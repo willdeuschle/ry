@@ -120,43 +120,46 @@ fn recurse<'a>(
     visited: &mut Vec<VisitedNode<'a>>,
 ) {
     match node {
-        Yaml::Hash(h) => recurse_hash(h, head, tail, path, following_splat, visited),
-        Yaml::Array(v) => recurse_array(v, head, tail, path, following_splat, visited),
+        Yaml::Hash(h) => recurse_hash(h, head, tail, path, following_splat, visited, traverse),
+        Yaml::Array(v) => recurse_array(v, head, tail, path, following_splat, visited, traverse),
         _ => {
             error!("can only recurse on maps or arrays. recursing on `{:?}` is not supported, continuing", node);
         }
     }
 }
 
-// TODO(wdeuschle): unit test
-fn recurse_hash<'a>(
+fn extend_path(p: &String, extend: &str) -> String {
+    let mut new_path = p.clone();
+    if new_path.len() > 0 {
+        new_path.push_str(".")
+    }
+    new_path.push_str(extend);
+    new_path
+}
+
+fn recurse_hash<'a, F>(
     hash: &'a Hash,
     head: &str,
     tail: &[String],
     path: String,
     following_splat: bool,
     visited: &mut Vec<VisitedNode<'a>>,
-) {
+    traverse: F,
+) where
+    F: Fn(&'a Yaml, &str, &[String], String, bool, &mut Vec<VisitedNode<'a>>),
+{
     for (k, v) in hash {
         match k {
             Yaml::String(k_str) => {
                 if following_splat {
                     // traverse deeper, still following a splat
                     debug!("following splat in map for key: {}, traverse", k_str);
-                    let mut new_path = path.clone();
-                    if new_path.len() > 0 {
-                        new_path.push_str(".");
-                    }
-                    new_path.push_str(k_str);
+                    let new_path = extend_path(&path, k_str);
                     traverse(v, head, tail, new_path, true, visited);
                 }
                 if matches_pattern(k_str, head) {
                     debug!("match on key: {}, traverse", k_str);
-                    let mut new_path = path.clone();
-                    if new_path.len() > 0 {
-                        new_path.push_str(".");
-                    }
-                    new_path.push_str(k_str);
+                    let new_path = extend_path(&path, k_str);
                     traverse(v, head, tail, new_path, head == SPLAT, visited);
                 // tail.len() == 0 indicates this is a final path elem
                 } else if is_child_filter(head) && tail.len() == 0 {
@@ -169,12 +172,8 @@ fn recurse_hash<'a>(
                         debug!("did not match on key: `{}`, continue", k_str);
                         continue;
                     }
-                    debug!("match on child value filter: {}", head);
-                    let mut new_path = path.clone();
-                    if new_path.len() > 0 {
-                        new_path.push_str(".");
-                    }
-                    new_path.push_str(k_str);
+                    debug!("match on child value filter: `{}`", head);
+                    let new_path = extend_path(&path, k_str);
                     traverse(v, head, tail, new_path, false, visited);
                 } else {
                     debug!("did not match on key: `{}`, continue", k_str);
@@ -189,14 +188,17 @@ fn recurse_hash<'a>(
 }
 
 // TODO(wdeuschle): unit test
-fn recurse_array<'a>(
+fn recurse_array<'a, F>(
     array: &'a Array,
     head: &str,
     tail: &[String],
     path: String,
     following_splat: bool,
     visited: &mut Vec<VisitedNode<'a>>,
-) {
+    traverse: F,
+) where
+    F: Fn(&'a Yaml, &str, &[String], String, bool, &mut Vec<VisitedNode<'a>>),
+{
     if following_splat {
         // traverse deeper, still following a splat
         debug!(
@@ -522,5 +524,350 @@ mod tests {
             visited[visited.len() - 1].path,
             format!("path {}", visited.len() - 1)
         );
+    }
+
+    #[test]
+    fn test_extend_path() {
+        let no_path = "".to_string();
+        let existing_path = "existing".to_string();
+        let extend = "extend";
+
+        assert_eq!(extend_path(&no_path, extend), extend);
+        assert_eq!(
+            extend_path(&existing_path, extend),
+            format!("{}.{}", existing_path, extend)
+        );
+    }
+
+    #[test]
+    fn test_recurse_hash_splat_no_continue() {
+        let hash_str = "a: b";
+        let hash_yaml = &YamlLoader::load_from_str(hash_str).unwrap()[0];
+        let hash = match hash_yaml {
+            Yaml::Hash(h) => h,
+            _ => panic!("invalid, not hash type"),
+        };
+        let head = "";
+        let tail = &[];
+        let path = "start";
+        let (is_splat, becomes_splat) = (true, true);
+        let mut visited = Vec::<VisitedNode>::new();
+        let visited_node = Yaml::String("test".to_string());
+        recurse_hash(
+            hash,
+            head,
+            tail,
+            String::from(path),
+            is_splat,
+            &mut visited,
+            |_: &Yaml,
+             _: &str,
+             _: &[String],
+             path: String,
+             still_splat: bool,
+             inner_visited: &mut Vec<VisitedNode>| {
+                assert_eq!(still_splat, becomes_splat);
+                inner_visited.push(VisitedNode {
+                    yml: &visited_node,
+                    path,
+                });
+            },
+        );
+        assert_eq!(visited.len(), 1);
+        assert_eq!(visited[0].yml, &visited_node);
+        let key = match hash.front().unwrap().0 {
+            Yaml::String(s) => s,
+            _ => panic!("failed to find hash key"),
+        };
+        assert_eq!(visited[0].path, format!("{}.{}", path, key));
+    }
+
+    #[test]
+    fn test_recurse_hash_splat_continues() {
+        let hash_str = "a: b";
+        let hash_yaml = &YamlLoader::load_from_str(hash_str).unwrap()[0];
+        let hash = match hash_yaml {
+            Yaml::Hash(h) => h,
+            _ => panic!("invalid, not hash type"),
+        };
+        let head = "a";
+        let tail = &[];
+        let path = "start";
+        let (is_splat, becomes_splat_first, becomes_splat_second) = (true, true, false);
+        let mut visited = Vec::<VisitedNode>::new();
+        let visited_node = Yaml::String("test".to_string());
+        recurse_hash(
+            hash,
+            head,
+            tail,
+            String::from(path),
+            is_splat,
+            &mut visited,
+            |_: &Yaml,
+             _: &str,
+             _: &[String],
+             path: String,
+             still_splat: bool,
+             inner_visited: &mut Vec<VisitedNode>| {
+                if inner_visited.len() == 0 {
+                    assert_eq!(still_splat, becomes_splat_first)
+                } else {
+                    assert_eq!(still_splat, becomes_splat_second)
+                }
+                inner_visited.push(VisitedNode {
+                    yml: &visited_node,
+                    path,
+                });
+            },
+        );
+        assert_eq!(visited.len(), 2);
+        assert_eq!(visited[0].yml, &visited_node);
+        assert_eq!(visited[1].yml, &visited_node);
+        let key = match hash.front().unwrap().0 {
+            Yaml::String(s) => s,
+            _ => panic!("failed to find hash key"),
+        };
+        assert_eq!(visited[0].path, format!("{}.{}", path, key));
+        assert_eq!(visited[1].path, format!("{}.{}", path, key));
+    }
+
+    #[test]
+    fn test_recurse_hash_matches_pattern() {
+        let hash_str = "a: b";
+        let hash_yaml = &YamlLoader::load_from_str(hash_str).unwrap()[0];
+        let hash = match hash_yaml {
+            Yaml::Hash(h) => h,
+            _ => panic!("invalid, not hash type"),
+        };
+        let head = "a";
+        let tail = &[];
+        let path = "start";
+        let (is_splat, becomes_splat) = (false, false);
+        let mut visited = Vec::<VisitedNode>::new();
+        let visited_node = Yaml::String("test".to_string());
+        recurse_hash(
+            hash,
+            head,
+            tail,
+            String::from(path),
+            is_splat,
+            &mut visited,
+            |_: &Yaml,
+             _: &str,
+             _: &[String],
+             path: String,
+             still_splat: bool,
+             inner_visited: &mut Vec<VisitedNode>| {
+                assert_eq!(still_splat, becomes_splat);
+                inner_visited.push(VisitedNode {
+                    yml: &visited_node,
+                    path,
+                });
+            },
+        );
+        assert_eq!(visited.len(), 1);
+        assert_eq!(visited[0].yml, &visited_node);
+        let key = match hash.front().unwrap().0 {
+            Yaml::String(s) => s,
+            _ => panic!("failed to find hash key"),
+        };
+        assert_eq!(visited[0].path, format!("{}.{}", path, key));
+    }
+
+    #[test]
+    fn test_recurse_hash_matches_pattern_and_starts_splat() {
+        let hash_str = "a: b";
+        let hash_yaml = &YamlLoader::load_from_str(hash_str).unwrap()[0];
+        let hash = match hash_yaml {
+            Yaml::Hash(h) => h,
+            _ => panic!("invalid, not hash type"),
+        };
+        let head = SPLAT;
+        let tail = &[];
+        let path = "start";
+        let (is_splat, becomes_splat) = (false, true);
+        let mut visited = Vec::<VisitedNode>::new();
+        let visited_node = Yaml::String("test".to_string());
+        recurse_hash(
+            hash,
+            head,
+            tail,
+            String::from(path),
+            is_splat,
+            &mut visited,
+            |_: &Yaml,
+             _: &str,
+             _: &[String],
+             path: String,
+             still_splat: bool,
+             inner_visited: &mut Vec<VisitedNode>| {
+                assert_eq!(still_splat, becomes_splat);
+                inner_visited.push(VisitedNode {
+                    yml: &visited_node,
+                    path,
+                });
+            },
+        );
+        assert_eq!(visited.len(), 1);
+        assert_eq!(visited[0].yml, &visited_node);
+        let key = match hash.front().unwrap().0 {
+            Yaml::String(s) => s,
+            _ => panic!("failed to find hash key"),
+        };
+        assert_eq!(visited[0].path, format!("{}.{}", path, key));
+    }
+
+    #[test]
+    fn test_recurse_hash_is_matching_child_filter_with_empty_tail() {
+        let hash_str = "a: b";
+        let hash_yaml = &YamlLoader::load_from_str(hash_str).unwrap()[0];
+        let hash = match hash_yaml {
+            Yaml::Hash(h) => h,
+            _ => panic!("invalid, not hash type"),
+        };
+        let head = "(.==b)";
+        let tail = &[];
+        let path = "start";
+        let (is_splat, becomes_splat) = (false, false);
+        let mut visited = Vec::<VisitedNode>::new();
+        let visited_node = Yaml::String("test".to_string());
+        recurse_hash(
+            hash,
+            head,
+            tail,
+            String::from(path),
+            is_splat,
+            &mut visited,
+            |_: &Yaml,
+             _: &str,
+             _: &[String],
+             path: String,
+             still_splat: bool,
+             inner_visited: &mut Vec<VisitedNode>| {
+                assert_eq!(still_splat, becomes_splat);
+                inner_visited.push(VisitedNode {
+                    yml: &visited_node,
+                    path,
+                });
+            },
+        );
+        assert_eq!(visited.len(), 1);
+        assert_eq!(visited[0].yml, &visited_node);
+        let key = match hash.front().unwrap().0 {
+            Yaml::String(s) => s,
+            _ => panic!("failed to find hash key"),
+        };
+        assert_eq!(visited[0].path, format!("{}.{}", path, key));
+    }
+
+    #[test]
+    fn test_recurse_hash_is_matching_child_filter_without_empty_tail() {
+        let hash_str = "a: b";
+        let hash_yaml = &YamlLoader::load_from_str(hash_str).unwrap()[0];
+        let hash = match hash_yaml {
+            Yaml::Hash(h) => h,
+            _ => panic!("invalid, not hash type"),
+        };
+        let head = "(.==b)";
+        let tail = &["not empty".to_string()];
+        let path = "start";
+        let (is_splat, becomes_splat) = (false, false);
+        let mut visited = Vec::<VisitedNode>::new();
+        let visited_node = Yaml::String("test".to_string());
+        recurse_hash(
+            hash,
+            head,
+            tail,
+            String::from(path),
+            is_splat,
+            &mut visited,
+            |_: &Yaml,
+             _: &str,
+             _: &[String],
+             path: String,
+             still_splat: bool,
+             inner_visited: &mut Vec<VisitedNode>| {
+                assert_eq!(still_splat, becomes_splat);
+                inner_visited.push(VisitedNode {
+                    yml: &visited_node,
+                    path,
+                });
+            },
+        );
+        assert_eq!(visited.len(), 0);
+    }
+
+    #[test]
+    fn test_recurse_hash_is_not_matching_child_filter() {
+        let hash_str = "a: b";
+        let hash_yaml = &YamlLoader::load_from_str(hash_str).unwrap()[0];
+        let hash = match hash_yaml {
+            Yaml::Hash(h) => h,
+            _ => panic!("invalid, not hash type"),
+        };
+        let head = "(.==c)";
+        let tail = &[];
+        let path = "start";
+        let (is_splat, becomes_splat) = (false, false);
+        let mut visited = Vec::<VisitedNode>::new();
+        let visited_node = Yaml::String("test".to_string());
+        recurse_hash(
+            hash,
+            head,
+            tail,
+            String::from(path),
+            is_splat,
+            &mut visited,
+            |_: &Yaml,
+             _: &str,
+             _: &[String],
+             path: String,
+             still_splat: bool,
+             inner_visited: &mut Vec<VisitedNode>| {
+                assert_eq!(still_splat, becomes_splat);
+                inner_visited.push(VisitedNode {
+                    yml: &visited_node,
+                    path,
+                });
+            },
+        );
+        assert_eq!(visited.len(), 0);
+    }
+
+    #[test]
+    fn test_recurse_hash_is_not_matching() {
+        let hash_str = "a: b";
+        let hash_yaml = &YamlLoader::load_from_str(hash_str).unwrap()[0];
+        let hash = match hash_yaml {
+            Yaml::Hash(h) => h,
+            _ => panic!("invalid, not hash type"),
+        };
+        let head = "b";
+        let tail = &[];
+        let path = "start";
+        let (is_splat, becomes_splat) = (false, false);
+        let mut visited = Vec::<VisitedNode>::new();
+        let visited_node = Yaml::String("test".to_string());
+        recurse_hash(
+            hash,
+            head,
+            tail,
+            String::from(path),
+            is_splat,
+            &mut visited,
+            |_: &Yaml,
+             _: &str,
+             _: &[String],
+             path: String,
+             still_splat: bool,
+             inner_visited: &mut Vec<VisitedNode>| {
+                assert_eq!(still_splat, becomes_splat);
+                inner_visited.push(VisitedNode {
+                    yml: &visited_node,
+                    path,
+                });
+            },
+        );
+        assert_eq!(visited.len(), 0);
     }
 }
