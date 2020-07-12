@@ -45,7 +45,7 @@ fn parse_print_mode(mode: &str) -> PrintMode {
 
 pub fn run_cli() {
     let yaml_file_arg = "yaml_file";
-    let path_expression_arg = "yaml_file";
+    let path_expression_arg = "path_expression";
     let default_value_arg = "default_value";
     let length_arg = "length";
     let print_mode_arg = "print_mode";
